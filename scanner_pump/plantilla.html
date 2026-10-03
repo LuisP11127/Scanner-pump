@@ -1,0 +1,1751 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Scanner-pump</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Semi+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Terminal de trading: barra de escaneo arriba, cuadrícula de mini-gráficos y visor a pantalla completa. */
+:root {
+  --bg: #F2F4F7;
+  --panel: #FFFFFF;
+  --sunken: #E8ECF1;
+  --line: #D8DEE6;
+  --grid: #EEF1F5;
+  --fg: #121821;
+  --muted: #5A6778;
+  --accent: #2457D6;
+  --hot: #D9480F;
+  --up: #0B9A6A;
+  --down: #D13850;
+  --ma-fast: #B47C00;
+  --ma-mid: #BE2C8A;
+  --ma-slow: #6744D4;
+  --font-display: "Barlow Semi Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "Barlow", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --col: 340px;
+  --mini-h: 190px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0B1017; --panel: #121923; --sunken: #0E141C; --line: #243142; --grid: #19222E;
+    --fg: #E4E9F0; --muted: #8C99AC; --accent: #82A5FF; --hot: #FF8A3D; --up: #2CC088; --down: #F2566D;
+    --ma-fast: #F0B90B; --ma-mid: #EA4CB9; --ma-slow: #A98DFF;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0B1017; --panel: #121923; --sunken: #0E141C; --line: #243142; --grid: #19222E;
+  --fg: #E4E9F0; --muted: #8C99AC; --accent: #82A5FF; --hot: #FF8A3D; --up: #2CC088; --down: #F2566D;
+  --ma-fast: #F0B90B; --ma-mid: #EA4CB9; --ma-slow: #A98DFF;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.45 var(--font-body); }
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.up { color: var(--up); }
+.down { color: var(--down); }
+.hot { color: var(--hot); }
+.c-fast { color: var(--ma-fast); }
+.c-mid { color: var(--ma-mid); }
+.c-slow { color: var(--ma-slow); }
+
+.wrap { max-width: 1680px; margin: 0 auto; padding-inline: 16px; padding-block: 20px 32px; display: grid; gap: 16px; }
+@media (min-width: 900px) { .wrap { padding-inline: 28px; } }
+
+.top { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 32px; }
+.brand { display: grid; gap: 2px; }
+.brand h1 { margin: 0; font: 700 30px/1.05 var(--font-display); letter-spacing: 0.01em; text-wrap: balance; }
+.cond { margin: 0; font: 500 13.5px/1.3 var(--font-mono); color: var(--muted); }
+.meta { display: flex; flex-wrap: wrap; gap: 8px 24px; margin: 0; }
+.meta div { display: grid; gap: 1px; }
+.meta dt { font: 600 11px/1.2 var(--font-body); text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+.meta dd { margin: 0; font: 500 14px/1.3 var(--font-mono); font-variant-numeric: tabular-nums; }
+.top .btn { margin-left: auto; }
+
+.btn, .icon-btn, select, input[type="search"] {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 6px; color: var(--fg);
+}
+.btn { padding: 7px 12px; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
+.btn:hover, .icon-btn:hover { border-color: var(--muted); }
+.icon-btn { width: 34px; height: 34px; display: inline-grid; place-items: center; cursor: pointer; padding: 0; text-decoration: none; }
+.icon-btn svg, .btn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+select, input[type="search"] { padding: 7px 10px; min-width: 0; }
+input[type="search"] { width: 13rem; max-width: 100%; }
+
+.scan { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 12px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+.scan label { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.scan input[type="number"], .scan input[type="date"] { padding: 7px 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; color: var(--fg); font-family: var(--font-mono); max-width: 100%; }
+.scan input[type="number"] { width: 9rem; }
+.scan .hint-inline { font: 400 12px/1.2 var(--font-mono); color: var(--muted); }
+.btn.primary { background: var(--fg); border-color: var(--fg); color: var(--panel); }
+.btn.primary:hover { border-color: var(--fg); opacity: 0.9; }
+.btn[disabled] { opacity: 0.5; cursor: progress; }
+.scan-status { font: 500 13px/1.35 var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; min-width: 0; }
+.notice { margin: 0; padding: 10px 14px; border: 1px dashed var(--line); border-radius: 8px; background: var(--sunken); color: var(--fg); font-size: 14px; }
+.notice b { font-weight: 600; }
+.notice.error { border-style: solid; border-color: var(--down); }
+
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+.toolbar label, .toolbar .field, .track-bar label, .track-bar .field { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.seg { display: inline-flex; flex-wrap: wrap; padding: 2px; gap: 2px; background: var(--panel); border: 1px solid var(--line); border-radius: 7px; }
+.seg button { border: 0; background: transparent; color: var(--muted); padding: 5px 10px; border-radius: 5px; cursor: pointer; font-weight: 500; }
+.seg button[aria-pressed="true"] { background: var(--fg); color: var(--panel); }
+.seg .count { font-family: var(--font-mono); font-size: 12px; opacity: 0.8; margin-left: 4px; }
+.seg.tf button { font-family: var(--font-mono); font-size: 13px; }
+.toolbar .spacer { flex: 1 1 0; }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--col)), 1fr)); gap: 12px; }
+.grid.size-s { --col: 250px; --mini-h: 130px; }
+.grid.size-m { --col: 340px; --mini-h: 190px; }
+.grid.size-l { --col: 540px; --mini-h: 300px; }
+
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 12px 10px; display: grid; gap: 6px; cursor: pointer; min-width: 0; }
+.card:hover { border-color: var(--muted); }
+.card-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.sym { font: 600 19px/1.1 var(--font-display); letter-spacing: 0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sym small { font-size: 0.72em; color: var(--muted); font-weight: 600; margin-left: 1px; }
+.badge { font: 500 10.5px/1 var(--font-mono); text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 3px 5px; white-space: nowrap; }
+.card-head .icon-btn { margin-left: auto; width: 30px; height: 30px; flex: none; }
+.pcts { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; }
+.pct { display: inline-flex; align-items: baseline; gap: 6px; white-space: nowrap; }
+.pct small { font: 600 10.5px/1 var(--font-body); text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); }
+.pct b { font: 500 17px/1.2 var(--font-mono); font-variant-numeric: tabular-nums; }
+.pct .ok { font: 600 10px/1 var(--font-mono); color: var(--hot); border: 1px solid currentColor; border-radius: 3px; padding: 2px 3px; align-self: center; }
+.ohlc { display: flex; flex-wrap: wrap; gap: 2px 12px; font: 400 11.5px/1.35 var(--font-mono); font-variant-numeric: tabular-nums; color: var(--muted); }
+.ohlc b { font-weight: 500; color: var(--fg); }
+.ma-legend { display: flex; flex-wrap: wrap; gap: 2px 12px; font: 400 11.5px/1.35 var(--font-mono); font-variant-numeric: tabular-nums; color: var(--muted); }
+.ma-legend span b { font-weight: 500; }
+.mini { height: var(--mini-h); border-radius: 4px; overflow: hidden; background: var(--panel); position: relative; }
+.mini .placeholder, .big .placeholder { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 13px; text-align: center; padding: 8px; }
+.tf-tag { font: 500 11px/1 var(--font-mono); color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 3px 5px; white-space: nowrap; }
+.tf-tag.hot { color: var(--hot); border-color: currentColor; }
+.tf-tag.ana { color: var(--accent); border-color: currentColor; }
+.card-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; font-size: 13px; color: var(--muted); }
+.card-foot b { font: 500 13px var(--font-mono); color: var(--fg); font-variant-numeric: tabular-nums; }
+
+body.tracking .scan-only { display: none !important; }
+.seg.views { align-self: center; }
+.seg.views button { font-size: 15px; padding: 6px 14px; }
+.scan .check { gap: 6px; color: var(--fg); cursor: pointer; }
+.scan .check input { width: 16px; height: 16px; accent-color: var(--fg); margin: 0; }
+.track { display: grid; gap: 14px; }
+.track-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+.sync { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; font-size: 13.5px; color: var(--muted); }
+.sync b { color: var(--fg); font-weight: 600; }
+.btn.small { padding: 4px 10px; font-size: 13px; }
+.btn.danger { border-color: var(--down); color: var(--down); }
+.gh { display: grid; gap: 10px; max-width: 46rem; padding: 14px 16px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+.gh h3 { margin: 0; font: 600 19px/1.2 var(--font-display); }
+.gh ol { margin: 0; padding-left: 1.3em; display: grid; gap: 4px; font-size: 14px; }
+.gh a { color: var(--accent); }
+.gh label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
+.gh input { padding: 8px 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; color: var(--fg); font-family: var(--font-mono); min-width: 0; }
+.gh-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.gh-note, .gh-msg { margin: 0; font-size: 12.5px; color: var(--muted); }
+.days { display: grid; gap: 12px; }
+.day { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; min-width: 0; }
+.day-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; padding: 12px 14px; }
+.day-toggle { display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; background: none; color: var(--fg); cursor: pointer; text-align: left; }
+.day-toggle svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.day-toggle[aria-expanded="true"] svg { transform: rotate(90deg); }
+.day-toggle h2 { margin: 0; font: 600 21px/1.15 var(--font-display); letter-spacing: 0.01em; text-wrap: balance; }
+.day-stats { display: flex; flex-wrap: wrap; gap: 3px 14px; font-size: 13px; color: var(--muted); }
+.day-stats b { font: 500 13px var(--font-mono); color: var(--fg); font-variant-numeric: tabular-nums; }
+.day-stats b.up { color: var(--up); }
+.day-stats b.down { color: var(--down); }
+.day-stats b.ana { color: var(--accent); }
+.day-actions { margin-left: auto; display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+.day-actions .confirm { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.day-body { border-top: 1px solid var(--line); overflow-x: auto; }
+.coins { width: 100%; border-collapse: collapse; font-size: 14px; }
+.coins th { text-align: left; font: 600 11px/1.2 var(--font-body); text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); padding: 9px 14px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.coins th.ana { color: var(--accent); }
+.coins td { padding: 8px 14px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+.coins tbody tr:last-child td { border-bottom: 0; }
+.coins tbody tr { cursor: pointer; }
+.coins tbody tr:hover td, .coins tbody tr:focus-visible td { background: var(--sunken); }
+.coins tbody tr:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.coins .r { text-align: right; }
+.coins .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.coins .coin { font: 600 15px var(--font-display); letter-spacing: 0.01em; }
+.coins .coin small { font-size: 0.78em; color: var(--muted); margin-right: 8px; }
+.coins .c-ana { color: var(--accent); font-weight: 500; }
+.coins .d-short { display: none; }
+.coins .muted { color: var(--muted); }
+.chgbar { display: inline-block; position: relative; width: 52px; height: 6px; margin-left: 10px; vertical-align: middle; background: var(--grid); border-radius: 3px; overflow: hidden; }
+.chgbar i { position: absolute; top: 0; bottom: 0; left: 0; background: currentColor; border-radius: 3px; }
+/* En el móvil cada moneda ocupa varias líneas: moneda y variación arriba, fechas, subidas y precios debajo. */
+@media (max-width: 720px) {
+  .coins thead, .chgbar { display: none; }
+  .coins tbody tr { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "coin since" "exp ana" "rango cuerpo" "close now"; gap: 2px 12px; padding: 9px 12px; border-bottom: 1px solid var(--grid); }
+  .coins tbody tr:last-child { border-bottom: 0; }
+  .coins td { padding: 0; border: 0; font-size: 12.5px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .coins .d-long { display: none; }
+  .coins .d-short { display: inline; }
+  .coins .c-coin { grid-area: coin; font-size: 14px; }
+  .coins .c-coin { white-space: normal; overflow: visible; }
+  .coins .c-coin .badge { margin-left: 2px; }
+  .coins .c-since { grid-area: since; font-weight: 500; font-size: 14px; }
+  .coins .c-exp { grid-area: exp; }
+  .coins .c-ana { grid-area: ana; text-align: right; }
+  .coins .c-rango { grid-area: rango; text-align: left; }
+  .coins .c-cuerpo { grid-area: cuerpo; }
+  .coins .c-close { grid-area: close; text-align: left; }
+  .coins .c-now { grid-area: now; }
+  .coins td[data-label]::before { content: attr(data-label) " "; color: var(--muted); font-family: var(--font-body); font-weight: 400; }
+}
+.empty { padding: 28px 16px; text-align: center; color: var(--muted); border: 1px dashed var(--line); border-radius: 8px; }
+.foot { font-size: 12.5px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 18px; }
+.foot a { color: inherit; }
+
+.viewer { position: fixed; inset: 0; z-index: 50; background: var(--bg); display: flex; flex-direction: column; gap: 10px;
+  padding-inline: 16px; padding-block: calc(env(safe-area-inset-top, 0px) + 14px) calc(env(safe-area-inset-bottom, 0px) + 12px); }
+@media (min-width: 900px) { .viewer { padding-inline: 28px; } }
+.viewer-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 22px; }
+.viewer-title { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; min-width: 0; }
+.viewer-title .sym { font-size: 28px; }
+.viewer-title .price { font: 500 16px/1.2 var(--font-mono); color: var(--muted); }
+.viewer-title .price b { color: var(--fg); font-weight: 500; font-size: 19px; }
+.viewer-stats { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; font-size: 13.5px; color: var(--muted); }
+.viewer-stats b { font: 500 13.5px var(--font-mono); color: var(--fg); }
+.controls { margin-left: auto; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.controls .sep { width: 1px; height: 22px; background: var(--line); margin-inline: 2px; }
+.viewer .ma-legend { font-size: 12.5px; gap: 2px 16px; }
+.big { flex: 1 1 auto; min-height: 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--panel); position: relative; }
+.hint { margin: 0; font-size: 12.5px; color: var(--muted); }
+body.viewing { overflow: hidden; }
+body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .viewer:not([hidden]) { animation: viewer-in 140ms ease-out; }
+  @keyframes viewer-in { from { opacity: 0; transform: scale(0.99); } to { opacity: 1; transform: none; } }
+}
+@media (max-width: 560px) {
+  .top .btn { margin-left: 0; }
+  .controls { margin-left: 0; }
+  .viewer-title .sym { font-size: 23px; }
+  .hint { display: none; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <h1>Scanner-pump</h1>
+      <p class="cond" id="cond">Velas 1D con subida <span class="hot">≥ 10 %</span> · Mín→Máx o Apertura→Cierre</p>
+    </div>
+    <nav class="seg views" id="views" aria-label="Secciones">
+      <button type="button" data-view="scan" aria-pressed="true">Escáner</button>
+      <button type="button" data-view="track" aria-pressed="false">Seguimiento</button>
+    </nav>
+    <dl class="meta scan-only" id="meta"></dl>
+    <button class="btn scan-only" id="load" type="button">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4m0 0L8 8m4-4 4 4M5 15v4h14v-4"/></svg>
+      Cargar informe
+    </button>
+    <input id="file" type="file" accept=".html,.htm,.json,application/json,text/html" hidden>
+  </header>
+
+  <form class="scan scan-only" id="scan-form" autocomplete="off">
+    <label>Mercado
+      <select id="scan-market">
+        <option value="ambos">Spot y futuros</option>
+        <option value="spot">Spot</option>
+        <option value="futures">Futuros</option>
+      </select>
+    </label>
+    <label>Vela 1D
+      <input id="scan-date" type="date" required aria-describedby="scan-date-hint">
+      <span class="hint-inline" id="scan-date-hint"></span>
+    </label>
+    <label>Vol. mín. vela
+      <input id="scan-minvol" type="number" min="0" step="100000" value="0" inputmode="numeric" aria-label="Volumen mínimo de la vela, en USDT"> USDT
+    </label>
+    <label class="check"><input id="scan-track" type="checkbox" checked> Guardar en seguimiento</label>
+    <button class="btn primary" id="scan-go" type="submit">Escanear</button>
+    <span class="scan-status" id="scan-status" aria-live="polite"></span>
+  </form>
+  <p class="notice scan-only" id="notice" hidden></p>
+
+  <div class="toolbar scan-only" id="toolbar" hidden>
+    <div class="seg" id="market" role="group" aria-label="Mercado"></div>
+    <span class="field">Medida
+      <span class="seg" id="crit" role="group" aria-label="Medida de la subida"></span>
+    </span>
+    <label>Subida mín.
+      <select id="minpct" aria-label="Subida mínima"></select>
+    </label>
+    <label>Orden
+      <select id="sort">
+        <option value="rango">Mayor subida Mín→Máx</option>
+        <option value="cuerpo">Mayor subida Apertura→Cierre</option>
+        <option value="volumen">Mayor volumen de la vela</option>
+        <option value="simbolo">Símbolo</option>
+      </select>
+    </label>
+    <input id="search" type="search" placeholder="Buscar moneda" aria-label="Buscar moneda" autocomplete="off">
+    <span class="field">Gráfico
+      <span class="seg tf" id="tf" role="group" aria-label="Temporalidad de los gráficos"></span>
+    </span>
+    <span class="spacer"></span>
+    <span class="field">Tamaño
+      <span class="seg" id="size" role="group" aria-label="Tamaño de los gráficos">
+        <button type="button" data-size="s" aria-pressed="false">S</button>
+        <button type="button" data-size="m" aria-pressed="true">M</button>
+        <button type="button" data-size="l" aria-pressed="false">L</button>
+      </span>
+    </span>
+  </div>
+
+  <main class="grid scan-only size-m" id="grid" aria-live="polite"></main>
+  <p class="empty scan-only" id="empty" hidden></p>
+
+  <section class="track" id="view-track" aria-label="Seguimiento" hidden>
+    <div class="track-bar">
+      <div class="seg" id="track-market" role="group" aria-label="Mercado"></div>
+      <span class="field">Medida
+        <span class="seg" id="track-crit" role="group" aria-label="Medida de la subida"></span>
+      </span>
+      <label>Subida mín.
+        <select id="track-minpct" aria-label="Subida mínima"></select>
+      </label>
+      <label>Orden
+        <select id="track-sort">
+          <option value="rango">Mayor subida Mín→Máx</option>
+          <option value="cuerpo">Mayor subida Apertura→Cierre</option>
+          <option value="desde">Mayor subida desde el cierre</option>
+          <option value="moneda">Moneda</option>
+        </select>
+      </label>
+      <button class="btn" id="track-refresh" type="button">Actualizar precios</button>
+      <span class="scan-status" id="track-status" aria-live="polite"></span>
+    </div>
+    <div class="sync" id="track-sync"></div>
+    <p class="gh-note" id="track-note"></p>
+    <form class="gh" id="gh-form" autocomplete="off" hidden>
+      <h3>Guardar el seguimiento en GitHub</h3>
+      <ol>
+        <li>Abre <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">crear una clave (fine-grained token)</a> en GitHub.</li>
+        <li>Ponle un nombre (por ejemplo, <b>Scanner-pump</b>). En <b>Repository access</b> elige <b>Only select repositories</b> y tu repositorio.</li>
+        <li>En <b>Permissions → Repository permissions → Contents</b> elige <b>Read and write</b>.</li>
+        <li>Pulsa <b>Generate token</b>, copia la clave y pégala aquí.</li>
+      </ol>
+      <label>Repositorio
+        <input id="gh-repo" placeholder="usuario/repositorio" spellcheck="false">
+      </label>
+      <label>Clave
+        <input id="gh-token" type="password" placeholder="github_pat_…" spellcheck="false">
+      </label>
+      <div class="gh-actions">
+        <button class="btn primary" type="submit">Conectar</button>
+        <button class="btn" id="gh-cancel" type="button">Cancelar</button>
+        <p class="gh-msg" id="gh-msg" aria-live="polite"></p>
+      </div>
+      <p class="gh-note">La clave se guarda solo en este navegador y solo se envía a GitHub. Cada día de seguimiento queda como un archivo en <code>datos/seguimiento/</code> del repositorio.</p>
+    </form>
+    <p class="notice" id="track-notice" hidden></p>
+    <div class="days" id="track-days"></div>
+  </section>
+
+  <footer class="foot">
+    <span>Datos: API pública de Binance (spot: data-api.binance.vision · futuros: www.binance.com).</span>
+    <span>Gráficos: <a href="https://www.tradingview.com/" target="_blank" rel="noopener">TradingView Lightweight Charts</a>.</span>
+    <span>No es una recomendación de inversión.</span>
+  </footer>
+</div>
+
+<div class="viewer" id="viewer" role="dialog" aria-modal="true" aria-labelledby="v-sym" hidden>
+  <div class="viewer-head">
+    <div class="viewer-title">
+      <span class="sym" id="v-sym"></span>
+      <span class="badge" id="v-badge"></span>
+      <span class="price" id="v-price"></span>
+      <span class="pcts" id="v-pcts"></span>
+    </div>
+    <div class="viewer-stats" id="v-stats"></div>
+    <div class="seg tf" id="v-tf" role="group" aria-label="Temporalidad del gráfico"></div>
+    <div class="seg" id="v-cut" role="group" aria-label="Velas que se ven">
+      <button type="button" data-cut="0" aria-pressed="true">Todo</button>
+      <button type="button" data-cut="1" aria-pressed="false" title="Muestra el gráfico como estaba al cierre de la fecha de análisis (tecla H)">Hasta el análisis</button>
+    </div>
+    <div class="controls">
+      <button class="icon-btn" id="v-prev" type="button" title="Moneda anterior (←)" aria-label="Moneda anterior">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg></button>
+      <button class="btn" id="v-next" type="button" title="Moneda siguiente (→)">Siguiente
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>
+      <span class="sep" aria-hidden="true"></span>
+      <button class="icon-btn" id="v-out" type="button" title="Alejar (−)" aria-label="Alejar">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg></button>
+      <button class="icon-btn" id="v-in" type="button" title="Acercar (+)" aria-label="Acercar">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+      <button class="icon-btn" id="v-fit" type="button" title="Ver todo el historial (0)" aria-label="Ver todo el historial">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+      <button class="icon-btn" id="v-focus" type="button" title="Volver a la explosión (E)" aria-label="Volver a la explosión">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></button>
+      <a class="icon-btn" id="v-link" target="_blank" rel="noopener" title="Abrir en Binance" aria-label="Abrir en Binance">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 5h5v5M19 5l-8 8M17 14v5H5V7h5"/></svg></a>
+      <span class="sep" aria-hidden="true"></span>
+      <button class="icon-btn" id="v-close" type="button" title="Cerrar (Esc)" aria-label="Cerrar">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    </div>
+  </div>
+  <div class="ma-legend" id="v-legend"></div>
+  <div class="big" id="big"></div>
+  <p class="hint">Rueda del ratón o pellizco para acercar y alejar · arrastra para moverte en el tiempo · ← → cambia de moneda · H muestra solo hasta la fecha de análisis · E vuelve a la explosión · Esc cierra · horas en hora Lima (UTC-5)</p>
+</div>
+
+<script id="scanner-data" type="application/json">__SCANNER_DATA__</script>
+<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.3/dist/lightweight-charts.standalone.production.js" integrity="sha384-stKllnUqA9AD0gsKCuUtf5XlqAW7PwIgDagoNsTWkjkBmJ/GZ/uHTgEBxdLV2VSK" crossorigin="anonymous"></script>
+<script>
+(() => {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const MARKET_NAMES = { spot: "Spot", futures: "Futuros" };
+  const SIZES = { s: 90, m: 120, l: 160 };  // velas visibles en cada mini-gráfico
+  const DAY = 86400000;
+  // Hora de Lima (Perú): UTC-5 todo el año. Binance abre cada vela diaria a las 00:00 UTC (19:00 en Lima) y
+  // la muestra con la fecha de Lima: la vela que abre el 2 oct a las 00:00 UTC es la «vela del 1 oct», que
+  // termina de construirse el 2 oct a las 19:00.
+  const ZONA = { nombre: "hora Lima", offset: -5 * 3600000 };
+  const MIN_PCT = 10;
+  const PCT_STEPS = [10, 15, 20, 25, 30, 40, 50, 75, 100];
+  const MEDIAS = [7, 25, 99];
+  const CHART_TFS = ["2h", "4h", "8h", "12h", "1d"];
+  const TF_MS = { "2h": 7200000, "4h": 14400000, "8h": 28800000, "12h": 43200000, "1d": DAY };
+  const CHART_BEFORE = 250, CHART_LIMIT = 330;  // velas de cada gráfico: 250 antes de la explosión y el resto después
+  const CHART_TTL = 5 * 60000;                  // cada cuánto se vuelven a pedir las velas de un gráfico
+  const CRITS = { rango: "Mín→Máx", cuerpo: "Apertura→Cierre" };
+  const state = { data: null, origin: null, items: [], view: [], market: "todos", crit: "rango", minPct: MIN_PCT, sort: "rango",
+    q: "", size: "m", current: -1, tf: "1d", vtf: "1d", cut: false, trackSaved: null };
+  const minis = new Map();  // elemento .mini -> entrada de gráfico
+  let big = null;
+  let lastFocus = null;
+
+  // ---------- utilidades ----------
+  function h(tag, attrs, ...children) {
+    const el = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs || {})) {
+      if (v == null || v === false) continue;
+      if (k === "class") el.className = v; else if (k === "text") el.textContent = v; else el.setAttribute(k, v === true ? "" : v);
+    }
+    for (const c of children) if (c != null) el.append(c);
+    return el;
+  }
+  const store = {
+    get(k) { try { return localStorage.getItem("scanner-pump:" + k); } catch (e) { return null; } },
+    set(k, v) { try { localStorage.setItem("scanner-pump:" + k, v); } catch (e) { /* sin almacenamiento */ } },
+  };
+  function readJSON(key, fallback) {
+    try { const v = JSON.parse(store.get(key) || "null"); return v == null ? fallback : v; } catch (err) { return fallback; }
+  }
+  function decimals(v) {
+    if (!v) return 2;
+    return Math.max(2, Math.min(10, 4 - Math.floor(Math.log10(Math.abs(v)))));
+  }
+  function fmtPrice(v) {
+    if (v == null || !isFinite(v)) return "-";
+    const d = decimals(v);
+    return v.toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
+  }
+  function fmtPct(v) { return v == null || !isFinite(v) ? "-" : (v >= 0 ? "+" : "") + v.toFixed(2) + "%"; }
+  function fmtVol(v) {
+    if (v == null || !isFinite(v)) return "-";
+    for (const [lim, s] of [[1e9, "B"], [1e6, "M"], [1e3, "K"]]) if (Math.abs(v) >= lim) return (v / lim).toFixed(2) + s;
+    return v.toFixed(0);
+  }
+  function sma(values, period) {
+    const out = new Array(values.length).fill(null);
+    let sum = 0;
+    for (let i = 0; i < values.length; i++) {
+      sum += values[i];
+      if (i >= period) sum -= values[i - period];
+      if (i >= period - 1) out[i] = sum / period;
+    }
+    return out;
+  }
+  function tokens() {
+    const cs = getComputedStyle(document.documentElement);
+    const g = (n) => cs.getPropertyValue(n).trim();
+    return { panel: g("--panel"), grid: g("--grid"), line: g("--line"), fg: g("--fg"), muted: g("--muted"), hot: g("--hot"),
+      up: g("--up"), down: g("--down"), ma: [g("--ma-fast"), g("--ma-mid"), g("--ma-slow")], mono: g("--font-mono"), accent: g("--accent") };
+  }
+  function binanceUrl(it) {
+    return it.mercado === "futures"
+      ? "https://www.binance.com/es/futures/" + encodeURIComponent(it.simbolo)
+      : "https://www.binance.com/es/trade/" + encodeURIComponent(it.base + "_" + it.quote) + "?type=spot";
+  }
+  function tfLabel(tf) { return tf.toUpperCase(); }
+  const round = (v, n) => (v == null || !isFinite(v) ? null : Math.round(v * 10 ** n) / 10 ** n);
+
+  // ---------- fechas (velas diarias de Binance en hora Lima) ----------
+  function labelOf(ms) { return new Date(ms + ZONA.offset).toISOString().slice(0, 10); }
+  function openOf(label) {  // apertura (00:00 UTC) de la vela que Binance muestra con esa fecha en hora Lima
+    const [y, m, d] = label.split("-").map(Number);
+    return Math.ceil((Date.UTC(y, m - 1, d) - ZONA.offset) / DAY) * DAY;
+  }
+  function lastClosedOpen(now) { return Math.floor((now || Date.now()) / DAY) * DAY - DAY; }
+  function dayDate(label) { const [y, m, d] = label.split("-").map(Number); return new Date(Date.UTC(y, m - 1, d)); }
+  function dayTitle(label) {
+    const date = dayDate(label);
+    const text = date.toLocaleDateString("es-ES", { day: "numeric", month: "long", timeZone: "UTC" });
+    return date.getUTCFullYear() === new Date().getUTCFullYear() ? text : text + " de " + date.getUTCFullYear();
+  }
+  function shortDate(label) { return dayDate(label).toLocaleDateString("es-ES", { day: "numeric", month: "short", timeZone: "UTC" }); }
+  const lima = (ms) => new Date(ms + ZONA.offset);
+  function fmtTime(ms) { return lima(ms).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" }); }
+  function fmtDateTime(ms) {
+    return lima(ms).toLocaleString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "UTC" });
+  }
+  function daysAgo(label) {
+    const n = Math.round((dayDate(labelOf(Date.now())) - dayDate(label)) / DAY);
+    return n <= 0 ? "hoy" : n === 1 ? "ayer" : "hace " + n + " días";
+  }
+
+  // ---------- datos ----------
+  function parsePayload(text) {
+    text = text.trim();
+    let obj;
+    if (text.startsWith("{")) {
+      obj = JSON.parse(text);
+    } else {
+      const doc = new DOMParser().parseFromString(text, "text/html");
+      const el = doc.getElementById("scanner-data");
+      if (!el) throw new Error("no es un informe de Scanner-pump");
+      obj = JSON.parse(el.textContent);
+    }
+    if (!obj || typeof obj !== "object" || !obj.mercados) throw new Error("no contiene resultados del scanner");
+    return obj;
+  }
+  // origin: "escaneo" (desde esta página), "informe" (archivo o página generada) o "seguimiento".
+  function setData(data, origin) {
+    state.data = data;
+    state.origin = origin;
+    state.items = [];
+    for (const [key, m] of Object.entries(data.mercados)) {
+      for (const it of m.coincidencias || []) state.items.push(Object.assign({}, it, { mercado: it.mercado || key }));
+    }
+    if (data.orden && SORTS[data.orden] && !store.get("sort")) state.sort = data.orden;
+    $("sort").value = state.sort;
+    $("toolbar").hidden = false;
+    renderTf();
+    renderHeader();
+    renderNotice();
+    renderGrid();
+  }
+  function pctOf(it, crit) { return crit === "cuerpo" ? it.pct_cuerpo : it.pct_rango; }
+  function passes(it, crit, minPct) { const v = pctOf(it, crit); return v != null && v >= minPct; }
+  // Moneda sin el multiplicador de algunos contratos de futuros (1000PEPE → PEPE, 1MBABYDOGE → BABYDOGE).
+  function coinOf(it) { return String(it.base || it.simbolo).replace(/^(1000000|100000|10000|1000|1M)(?=[A-Z])/, ""); }
+  // Cada moneda una sola vez: si está en spot y en futuros, se queda la de spot.
+  function uniqueItems(items) {
+    const spotCoins = new Set(items.filter((it) => it.mercado === "spot").map(coinOf));
+    return items.filter((it) => it.mercado === "spot" || !spotCoins.has(coinOf(it)));
+  }
+  function byMarket(items, market) {
+    return market === "unicas" ? uniqueItems(items) : items.filter((it) => market === "todos" || it.mercado === market);
+  }
+  function marketButtons(container, items, selected, onPick, crit, minPct) {
+    container.textContent = "";
+    const keys = [...new Set(items.map((it) => it.mercado))];
+    const options = [["todos", "Todos"], ...keys.map((k) => [k, MARKET_NAMES[k] || k])];
+    if (keys.length > 1) options.push(["unicas", "No repetidas"]);
+    for (const [key, label] of options) {
+      const n = byMarket(items, key).filter((it) => passes(it, crit, minPct)).length;
+      const b = h("button", { type: "button", "aria-pressed": String(key === selected) }, label, h("span", { class: "count", text: String(n) }));
+      b.addEventListener("click", () => onPick(key));
+      container.append(b);
+    }
+  }
+  function critButtons(container, items, selected, onPick, minPct) {
+    container.textContent = "";
+    for (const [key, label] of Object.entries(CRITS)) {
+      const n = items.filter((it) => passes(it, key, minPct)).length;
+      const b = h("button", { type: "button", "aria-pressed": String(key === selected),
+        title: key === "rango" ? "Del precio mínimo al máximo de la vela" : "Del precio de apertura al de cierre de la vela" },
+        label, h("span", { class: "count", text: String(n) }));
+      b.addEventListener("click", () => onPick(key));
+      container.append(b);
+    }
+  }
+  function fillPctSelect(select, value) {
+    select.textContent = "";
+    for (const p of PCT_STEPS) select.append(h("option", { value: String(p), text: "≥ " + p + " %" }));
+    select.value = String(PCT_STEPS.includes(value) ? value : MIN_PCT);
+  }
+
+  // ---------- cabecera ----------
+  function renderHeader() {
+    const d = state.data;
+    const meta = $("meta");
+    meta.textContent = "";
+    const add = (dt, dd, cls) => meta.append(h("div", null, h("dt", { text: dt }), h("dd", { class: cls, text: dd })));
+    if (d.fecha) add("Vela", dayTitle(d.fecha), "hot");
+    if (d.fecha_analisis) add("Análisis", dayTitle(d.fecha_analisis));
+    const when = new Date(d.generado);
+    if (d.generado && !isNaN(when)) add("Escaneo", fmtDateTime(when.getTime()));
+    for (const [key, mk] of Object.entries(d.mercados)) {
+      const n = (mk.coincidencias || []).length;
+      add(MARKET_NAMES[key] || mk.nombre || key, mk.analizadas != null ? n + " de " + mk.analizadas : String(n));
+    }
+    const pick = (fn) => (v) => { fn(v); renderHeader(); renderGrid(); };
+    const keys = new Set(state.items.map((it) => it.mercado));
+    if (!(state.market === "todos" || (state.market === "unicas" && keys.size > 1) || keys.has(state.market))) state.market = "todos";
+    marketButtons($("market"), state.items, state.market, pick((k) => { state.market = k; }), state.crit, state.minPct);
+    critButtons($("crit"), byMarket(state.items, state.market), state.crit, pick((k) => {
+      state.crit = k;
+      if (state.sort === "rango" || state.sort === "cuerpo") { state.sort = k; $("sort").value = k; }
+    }), state.minPct);
+  }
+  function renderNotice(label, text, isError) {
+    const n = $("notice");
+    n.textContent = "";
+    n.classList.toggle("error", !!isError);
+    if (!label && !text && state.origin === "seguimiento" && state.data) {
+      label = "Vela del " + dayTitle(state.data.fecha) + ". ";
+      text = "Son las monedas guardadas en el seguimiento para la última vela (las guarda cada día el escaneo automático de GitHub Actions, o tus escaneos). Pulsa «Escanear» para buscar de nuevo o elige otra fecha.";
+    }
+    n.hidden = !(label || text);
+    if (label) n.append(h("b", { text: label }));
+    if (text) n.append(text);
+  }
+
+  // ---------- cuadrícula ----------
+  const SORTS = {
+    rango: (a, b) => (b.pct_rango ?? -Infinity) - (a.pct_rango ?? -Infinity),
+    cuerpo: (a, b) => (b.pct_cuerpo ?? -Infinity) - (a.pct_cuerpo ?? -Infinity),
+    volumen: (a, b) => (b.volumen || 0) - (a.volumen || 0),
+    simbolo: (a, b) => a.simbolo.localeCompare(b.simbolo),
+  };
+  function pctBlock(it) {
+    const wrap = h("div", { class: "pcts" });
+    for (const [key, label] of [["rango", "Mín→Máx"], ["cuerpo", "Apert→Cierre"]]) {
+      const v = pctOf(it, key);
+      const ok = v != null && v >= MIN_PCT;
+      wrap.append(h("span", { class: "pct", title: key === "rango" ? "Del mínimo al máximo de la vela" : "De la apertura al cierre de la vela" },
+        h("small", { text: label }),
+        h("b", { class: key === "rango" ? "hot" : v >= 0 ? "up" : "down", text: fmtPct(v) }),
+        ok ? h("span", { class: "ok", text: "≥" + MIN_PCT + "%" }) : null));
+    }
+    return wrap;
+  }
+  function ohlc(it) {
+    const row = h("div", { class: "ohlc", title: "Apertura, máximo, mínimo y cierre de la vela del " + dayTitle(it.fecha) });
+    for (const [k, v] of [["A", it.open], ["M", it.high], ["m", it.low], ["C", it.close]]) row.append(h("span", null, k + " ", h("b", { text: fmtPrice(v) })));
+    return row;
+  }
+  function maLegend(it, idx, tf, cut) {
+    const sd = seriesData(it, tf, cut);
+    const vals = sd ? sd.raw.map((arr) => arr[idx == null ? sd.focus : idx]) : [null, null, null];
+    const wrap = h("div", { class: "ma-legend" });
+    MEDIAS.forEach((p, i) => wrap.append(h("span", null, h("b", { class: ["c-fast", "c-mid", "c-slow"][i], text: "MA(" + p + ") " }), fmtPrice(vals[i]))));
+    return wrap;
+  }
+  function analysisPct(it) { return it.analisis ? it.analisis.pct_cuerpo : null; }
+  const ICON_EXPAND = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg>';
+  function card(it, index) {
+    const expand = h("button", { class: "icon-btn", type: "button", title: "Ampliar", "aria-label": "Ampliar " + it.simbolo });
+    expand.innerHTML = ICON_EXPAND;
+    const mini = h("div", { class: "mini" });
+    mini.dataset.index = String(index);
+    const ana = analysisPct(it);
+    const el = h("article", { class: "card", tabindex: "0", "aria-label": it.simbolo },
+      h("div", { class: "card-head" },
+        h("span", { class: "sym" }, it.base || it.simbolo, h("small", { text: it.quote ? "/" + it.quote : "" })),
+        h("span", { class: "badge", text: MARKET_NAMES[it.mercado] || it.mercado }),
+        expand),
+      pctBlock(it),
+      ohlc(it),
+      maLegend(it, null, state.tf, false),
+      mini,
+      h("div", { class: "card-foot" },
+        h("span", { class: "tf-tag hot", text: "Vela " + shortDate(it.fecha), title: "Vela de la explosión" }),
+        h("span", { class: "tf-tag ana", text: "Análisis " + shortDate(it.fecha_analisis), title: "Fecha de análisis: la vela anterior" }),
+        ana == null ? null : h("span", { title: "Apertura→Cierre del día de análisis" }, "Día análisis ", h("b", { class: ana >= 0 ? "up" : "down", text: fmtPct(ana) })),
+        h("span", null, "Vol ", h("b", { text: fmtVol(it.volumen) }))));
+    el.addEventListener("click", () => openViewer(index));
+    el.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openViewer(index); } });
+    return el;
+  }
+  const observer = "IntersectionObserver" in window
+    ? new IntersectionObserver((entries) => {
+        for (const e of entries) if (e.isIntersecting) { observer.unobserve(e.target); createMini(e.target); }
+      }, { rootMargin: "400px 0px" })
+    : null;
+  function renderGrid() {
+    for (const entry of minis.values()) entry.chart.remove();
+    minis.clear();
+    if (observer) observer.disconnect();
+    const grid = $("grid");
+    grid.textContent = "";
+    if (!state.data) { $("empty").hidden = true; return; }
+    const q = state.q.trim().toUpperCase();
+    state.view = byMarket(state.items, state.market)
+      .filter((it) => passes(it, state.crit, state.minPct))
+      .filter((it) => !q || it.simbolo.toUpperCase().includes(q))
+      .sort(SORTS[state.sort] || SORTS.rango);
+    state.view.forEach((it, i) => {
+      const el = card(it, i);
+      grid.append(el);
+      const mini = el.querySelector(".mini");
+      if (observer) observer.observe(mini); else createMini(mini);
+    });
+    const empty = $("empty");
+    empty.hidden = state.view.length > 0;
+    empty.textContent = state.items.length === 0
+      ? "Ninguna vela subió un " + MIN_PCT + " % o más en este escaneo."
+      : "Ninguna moneda coincide con el filtro.";
+  }
+  function renderTf() {
+    const seg = $("tf");
+    seg.textContent = "";
+    for (const tf of CHART_TFS) {
+      const b = h("button", { type: "button", "aria-pressed": String(tf === state.tf) }, tfLabel(tf));
+      b.addEventListener("click", () => { state.tf = tf; store.set("tf", tf); renderTf(); renderGrid(); });
+      seg.append(b);
+    }
+  }
+
+  // ---------- gráficos ----------
+  // Las velas de cada gráfico se guardan por moneda, día de la explosión y temporalidad.
+  const charts = new Map();  // "mercado:símbolo:apertura:tf" -> { rows, at, sd }
+  const chartKey = (it, tf) => it.mercado + ":" + it.simbolo + ":" + it.apertura + ":" + tf;
+  function chartEntry(it, tf) {
+    const key = chartKey(it, tf);
+    let e = charts.get(key);
+    if (!e) {
+      const rows = (it.graficos || {})[tf];  // velas que trae un informe
+      if (Array.isArray(rows) && rows.length) charts.set(key, (e = { rows, at: 0, sd: {} }));
+    }
+    return e || null;
+  }
+  function seriesData(it, tf, cut) {
+    const e = chartEntry(it, tf);
+    if (!e) return null;
+    const k = cut ? "cut" : "all";
+    if (k in e.sd) return e.sd[k];
+    // «Hasta el análisis»: solo las velas que ya habían cerrado cuando empezó la vela de la explosión.
+    const rows = cut ? e.rows.filter((r) => r[0] + TF_MS[tf] <= it.apertura) : e.rows;
+    if (!rows.length) return (e.sd[k] = null);
+    // Lightweight Charts dibuja en UTC: se pasa a hora Lima, como muestra las velas Binance en Perú
+    // (la vela diaria que abre el 2 oct a las 00:00 UTC aparece como «1 oct 19:00»).
+    const time = (ms) => Math.floor((ms + ZONA.offset) / 1000);
+    const candles = rows.map((r) => ({ time: time(r[0]), open: r[1], high: r[2], low: r[3], close: r[4] }));
+    const closes = rows.map((r) => r[4]);
+    const raw = MEDIAS.map((p) => sma(closes, p));
+    const mas = raw.map((arr) => arr.flatMap((v, i) => (v == null ? [] : [{ time: candles[i].time, value: v }])));
+    const volume = rows.map((r, i) => ({ time: candles[i].time, value: r[5], up: r[4] >= r[1] }));
+    // Primera vela del día de la explosión y del día de análisis en esta temporalidad.
+    const first = (from, to) => { const i = rows.findIndex((r) => r[0] >= from); return i >= 0 && rows[i][0] < to ? i : -1; };
+    const exp = first(it.apertura, it.apertura + DAY);
+    const ana = first(it.apertura - DAY, it.apertura);
+    const focus = exp >= 0 ? exp : rows.length - 1;
+    return (e.sd[k] = { candles, raw, mas, volume, exp, ana, focus });
+  }
+  function chartOptions(t, isBig) {
+    return {
+      autoSize: true,
+      localization: { locale: "es-ES" },
+      layout: { background: { type: "solid", color: t.panel }, textColor: t.muted, fontFamily: t.mono, fontSize: isBig ? 12 : 10, attributionLogo: false },
+      grid: { vertLines: { color: t.grid }, horzLines: { color: t.grid } },
+      rightPriceScale: { borderColor: t.line, entireTextOnly: true, scaleMargins: isBig ? { top: 0.08, bottom: 0.24 } : { top: 0.12, bottom: 0.08 } },
+      timeScale: { borderColor: t.line, timeVisible: true, secondsVisible: false, rightOffset: isBig ? 6 : 2, fixLeftEdge: !isBig },
+      crosshair: isBig ? { mode: LightweightCharts.CrosshairMode.Normal }
+        : { vertLine: { visible: false, labelVisible: false }, horzLine: { visible: false, labelVisible: false } },
+      handleScroll: isBig, handleScale: isBig,
+    };
+  }
+  function markersFor(sd, t, isBig) {
+    const out = [];
+    if (sd.ana >= 0) out.push({ time: sd.candles[sd.ana].time, position: "belowBar", color: t.accent, shape: "arrowUp", text: isBig ? "Análisis" : "" });
+    if (sd.exp >= 0) out.push({ time: sd.candles[sd.exp].time, position: "aboveBar", color: t.hot, shape: "arrowDown", text: isBig ? "Explosión" : "" });
+    return out;
+  }
+  function applyColors(entry, t) {
+    entry.chart.applyOptions(chartOptions(t, entry.isBig));
+    entry.candles.applyOptions({ upColor: t.up, downColor: t.down, wickUpColor: t.up, wickDownColor: t.down, borderVisible: false });
+    entry.mas.forEach((s, i) => s.applyOptions({ color: t.ma[i] }));
+    if (entry.volume) {
+      const alpha = (c) => c + (c.startsWith("#") && c.length === 7 ? "66" : "");
+      entry.volume.setData(entry.sd.volume.map((v) => ({ time: v.time, value: v.value, color: alpha(v.up ? t.up : t.down) })));
+    }
+    entry.candles.setMarkers(markersFor(entry.sd, t, entry.isBig));
+  }
+  // Rango inicial: la explosión (o la última vela) a la derecha, con algo de margen para ver lo que pasó después.
+  function focusRange(sd, tf, isBig) {
+    const n = sd.candles.length;
+    const after = tf === "1d" ? (isBig ? 12 : 3) : Math.round((isBig ? 2 : 1) * DAY / TF_MS[tf]);
+    const end = Math.min(n - 1, sd.focus + after);
+    const visible = isBig ? 150 : SIZES[state.size];
+    return { from: Math.max(0, end - visible + 1), to: end + (isBig ? 6 : 2) };
+  }
+  function buildChart(el, it, isBig, tf, cut) {
+    const sd = seriesData(it, tf, cut);
+    if (!window.LightweightCharts || !sd) {
+      el.append(h("div", { class: "placeholder", text: window.LightweightCharts
+        ? (cut ? "No hay velas de " + tfLabel(tf) + " antes de la explosión" : "Sin velas de " + tfLabel(tf) + " para esta moneda")
+        : "No se pudo cargar la librería de gráficos" }));
+      return null;
+    }
+    const t = tokens();
+    const chart = LightweightCharts.createChart(el, chartOptions(t, isBig));
+    const d = decimals(it.close || it.open);
+    const priceFormat = { type: "price", precision: d, minMove: Math.pow(10, -d) };
+    const candles = chart.addCandlestickSeries({ priceFormat });
+    candles.setData(sd.candles);
+    const mas = sd.mas.map((data) => {
+      const s = chart.addLineSeries({ lineWidth: isBig ? 2 : 1, priceLineVisible: false, lastValueVisible: isBig, crosshairMarkerVisible: false, priceFormat });
+      s.setData(data);
+      return s;
+    });
+    let volume = null;
+    if (isBig) {
+      volume = chart.addHistogramSeries({ priceFormat: { type: "volume" }, priceScaleId: "vol", lastValueVisible: false, priceLineVisible: false });
+      chart.priceScale("vol").applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
+    }
+    const entry = { chart, candles, mas, volume, item: it, isBig, tf, sd };
+    applyColors(entry, t);
+    chart.timeScale().setVisibleLogicalRange(focusRange(sd, tf, isBig));
+    return entry;
+  }
+  function createMini(el) {
+    const it = state.view[Number(el.dataset.index)];
+    if (!it || minis.has(el)) return;
+    const tf = state.tf;
+    const draw = () => {
+      if (!el.isConnected || minis.has(el) || state.tf !== tf) return;
+      el.textContent = "";
+      const entry = buildChart(el, it, false, tf, false);
+      if (entry) minis.set(el, entry);
+      const legend = el.parentElement && el.parentElement.querySelector(".ma-legend");
+      if (legend) legend.replaceWith(maLegend(it, null, tf, false));
+    };
+    if (isFresh(it, tf)) { draw(); return; }
+    el.append(h("div", { class: "placeholder", text: "Cargando velas de " + tfLabel(tf) + "…" }));
+    loadCandles(it, tf).then(draw);
+  }
+  function refreshTheme() {
+    const t = tokens();
+    for (const entry of minis.values()) applyColors(entry, t);
+    if (big) applyColors(big, t);
+  }
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", refreshTheme);
+  new MutationObserver(refreshTheme).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "class"] });
+
+  // ---------- visor ampliado ----------
+  function updateLegend(idx) {
+    const it = state.view[state.current];
+    $("v-legend").replaceWith(Object.assign(maLegend(it, idx, state.vtf, state.cut), { id: "v-legend" }));
+    const sd = seriesData(it, state.vtf, state.cut);
+    const c = sd && sd.candles[idx];
+    if (c) {
+      const row = h("span", null);
+      for (const [k, v] of [["A", c.open], ["M", c.high], ["m", c.low], ["C", c.close]]) row.append(h("b", { text: k + " " }), fmtPrice(v), "  ");
+      const pr = c.low > 0 ? (c.high - c.low) / c.low * 100 : null;
+      const pc = c.open > 0 ? (c.close - c.open) / c.open * 100 : null;
+      row.append(h("b", { text: "Mín→Máx " }), h("span", { class: "hot", text: fmtPct(pr) }), "  ",
+        h("b", { text: "Apert→Cierre " }), h("span", { class: pc >= 0 ? "up" : "down", text: fmtPct(pc) }), "  ");
+      $("v-legend").prepend(row);
+    }
+  }
+  function openViewer(index) {
+    if (!state.view.length) return;
+    index = (index + state.view.length) % state.view.length;
+    const viewer = $("viewer");
+    if (viewer.hidden) { lastFocus = document.activeElement; state.vtf = state.tf; }
+    closeBig();
+    state.current = index;
+    const it = state.view[index];
+    $("v-sym").textContent = "";
+    $("v-sym").append(it.base || it.simbolo, h("small", { text: it.quote ? "/" + it.quote : "" }));
+    $("v-badge").textContent = MARKET_NAMES[it.mercado] || it.mercado;
+    $("v-price").textContent = "";
+    $("v-price").append("Cierre ", h("b", { text: fmtPrice(it.close) }));
+    $("v-pcts").replaceWith(Object.assign(pctBlock(it), { id: "v-pcts" }));
+    renderViewerStats(it, index);
+    const link = $("v-link");
+    link.href = binanceUrl(it);
+    viewer.hidden = false;
+    document.body.classList.add("viewing");
+    drawBig(it, index);
+    $("v-close").focus({ preventScroll: true });
+  }
+  function renderViewerStats(it, index) {
+    const stats = $("v-stats");
+    stats.textContent = "";
+    const ana = analysisPct(it);
+    const now = it.ahora ?? liveNow.get(it.mercado + ":" + it.simbolo);
+    const since = now != null && it.close ? (now - it.close) / it.close * 100 : null;
+    stats.append(
+      h("span", { class: "tf-tag hot", text: "Vela " + shortDate(it.fecha), title: "Vela de la explosión: abre el " + fmtDateTime(it.apertura) + " (" + ZONA.nombre + ")" }),
+      h("span", { class: "tf-tag ana", text: "Análisis " + shortDate(it.fecha_analisis), title: "Fecha de análisis: la vela anterior a la explosión" }),
+      ana == null ? null : h("span", null, "Día análisis ", h("b", { class: ana >= 0 ? "up" : "down", text: fmtPct(ana) })),
+      h("span", null, "Vol vela ", h("b", { text: fmtVol(it.volumen) })),
+      now == null ? null : h("span", null, "Ahora ", h("b", { text: fmtPrice(now) }), " ", h("b", { class: since >= 0 ? "up" : "down", text: fmtPct(since) })),
+      h("span", null, h("b", { text: (index + 1) + "/" + state.view.length })));
+  }
+  function renderCut() {
+    for (const b of $("v-cut").querySelectorAll("button")) b.setAttribute("aria-pressed", String((b.dataset.cut === "1") === state.cut));
+  }
+  function drawBig(it, index) {
+    const tf = state.vtf, el = $("big");
+    const pickTf = (next) => { state.vtf = next; drawBig(it, index); };
+    const tfs = () => {
+      const seg = $("v-tf");
+      seg.textContent = "";
+      for (const x of CHART_TFS) {
+        const b = h("button", { type: "button", "aria-pressed": String(x === tf) }, tfLabel(x));
+        b.addEventListener("click", () => pickTf(x));
+        seg.append(b);
+      }
+    };
+    const render = () => {
+      if ($("viewer").hidden || state.current !== index || state.vtf !== tf) return;
+      closeBig();
+      el.textContent = "";
+      tfs();
+      renderCut();
+      renderViewerStats(it, index);
+      big = buildChart(el, it, true, tf, state.cut);
+      const sd = seriesData(it, tf, state.cut);
+      const last = sd ? sd.candles.length - 1 : -1;
+      updateLegend(sd ? sd.focus : -1);
+      if (big) {
+        big.chart.subscribeCrosshairMove((p) => {
+          const idx = p && p.logical != null ? Math.round(p.logical) : sd.focus;
+          updateLegend(idx >= 0 && idx <= last ? idx : sd.focus);
+        });
+      }
+    };
+    tfs();
+    renderCut();
+    if (isFresh(it, tf)) { render(); return; }
+    closeBig();
+    el.textContent = "";
+    el.append(h("div", { class: "placeholder", text: "Cargando velas de " + tfLabel(tf) + "…" }));
+    loadCandles(it, tf).then(render);
+  }
+  function closeBig() {
+    if (big) { big.chart.remove(); big = null; }
+  }
+  function closeViewer() {
+    closeBig();
+    $("viewer").hidden = true;
+    document.body.classList.remove("viewing");
+    if (state.trackSaved) {  // el visor se abrió desde el seguimiento: vuelve el escáner a como estaba
+      Object.assign(state, state.trackSaved);
+      state.trackSaved = null;
+    }
+    const target = lastFocus && document.contains(lastFocus) ? lastFocus : $("grid").children[state.current];
+    if (target) target.focus({ preventScroll: false });
+  }
+  function setCut(cut) {
+    if (state.cut === cut || $("viewer").hidden) return;
+    state.cut = cut;
+    drawBig(state.view[state.current], state.current);
+  }
+  function zoom(factor) {
+    if (!big) return;
+    const ts = big.chart.timeScale();
+    const r = ts.getVisibleLogicalRange();
+    if (!r) return;
+    const width = Math.min(big.sd.candles.length + 40, Math.max(12, (r.to - r.from) * factor));
+    ts.setVisibleLogicalRange({ from: r.to - width, to: r.to });
+  }
+  function refocus() { if (big) big.chart.timeScale().setVisibleLogicalRange(focusRange(big.sd, big.tf, true)); }
+  $("v-close").addEventListener("click", closeViewer);
+  $("v-prev").addEventListener("click", () => openViewer(state.current - 1));
+  $("v-next").addEventListener("click", () => openViewer(state.current + 1));
+  $("v-in").addEventListener("click", () => zoom(0.7));
+  $("v-out").addEventListener("click", () => zoom(1.45));
+  $("v-fit").addEventListener("click", () => big && big.chart.timeScale().fitContent());
+  $("v-focus").addEventListener("click", refocus);
+  for (const b of $("v-cut").querySelectorAll("button")) b.addEventListener("click", () => setCut(b.dataset.cut === "1"));
+  document.addEventListener("keydown", (e) => {
+    if ($("viewer").hidden || e.altKey || e.ctrlKey || e.metaKey) return;
+    const keys = { Escape: closeViewer, ArrowLeft: () => openViewer(state.current - 1), ArrowRight: () => openViewer(state.current + 1),
+      "+": () => zoom(0.7), "=": () => zoom(0.7), "-": () => zoom(1.45), "0": () => big && big.chart.timeScale().fitContent(),
+      h: () => setCut(!state.cut), H: () => setCut(!state.cut), e: refocus, E: refocus };
+    if (keys[e.key]) { e.preventDefault(); keys[e.key](); }
+  });
+
+  // ---------- controles ----------
+  $("sort").addEventListener("change", (e) => { state.sort = e.target.value; store.set("sort", state.sort); renderGrid(); });
+  $("search").addEventListener("input", (e) => { state.q = e.target.value; renderGrid(); });
+  $("minpct").addEventListener("change", (e) => { state.minPct = Number(e.target.value) || MIN_PCT; renderHeader(); renderGrid(); });
+  function setSize(size) {
+    state.size = SIZES[size] ? size : "m";
+    $("grid").className = "grid scan-only size-" + state.size;
+    for (const b of $("size").querySelectorAll("button")) b.setAttribute("aria-pressed", String(b.dataset.size === state.size));
+    store.set("size", state.size);
+    for (const entry of minis.values()) entry.chart.timeScale().setVisibleLogicalRange(focusRange(entry.sd, entry.tf, false));
+  }
+  for (const b of $("size").querySelectorAll("button")) b.addEventListener("click", () => setSize(b.dataset.size));
+
+  async function loadFile(file) {
+    if (!file) return;
+    try {
+      setData(parsePayload(await file.text()), "informe");
+    } catch (err) {
+      const reason = err && err.message ? err.message.charAt(0).toUpperCase() + err.message.slice(1) : "Formato desconocido";
+      renderNotice("No se pudo cargar el archivo. ", reason + ". Usa el .html o el .json que genera el scanner.", true);
+    }
+  }
+  $("load").addEventListener("click", () => $("file").click());
+  $("file").addEventListener("change", (e) => { loadFile(e.target.files[0]); e.target.value = ""; });
+  document.addEventListener("dragover", (e) => { e.preventDefault(); document.body.classList.add("dragging"); });
+  document.addEventListener("dragleave", (e) => { if (!e.relatedTarget) document.body.classList.remove("dragging"); });
+  document.addEventListener("drop", (e) => {
+    e.preventDefault();
+    document.body.classList.remove("dragging");
+    loadFile(e.dataTransfer && e.dataTransfer.files[0]);
+  });
+
+  // ---------- Binance ----------
+  // Las peticiones salen desde el navegador de quien usa la página, con su conexión: no hace falta ningún
+  // servidor. Spot: data-api.binance.vision; futuros: www.binance.com (y si no responde, fapi.binance.com).
+  const STABLES = new Set(["USDT", "USDC", "FDUSD", "TUSD", "USDP", "DAI", "BUSD", "USDS", "USDE", "PYUSD", "USD1", "RLUSD", "XUSD", "BFUSD", "EUR", "EURI", "AEUR", "GBP"]);
+  const NON_CRYPTO = new Set(["INDEX", "COMMODITY", "EQUITY", "STOCK", "FOREX"]);
+  const PRODUCTS_URL = "https://www.binance.com/bapi/asset/v2/public/asset-service/product/get-products?includeEtf=true";
+  const API = {
+    spot: { nombre: "Spot", bases: ["https://data-api.binance.vision", "https://api.binance.com"], info: "/api/v3/exchangeInfo",
+      klines: "/api/v3/klines", price: "/api/v3/ticker/price", limit: 6000, infoW: 20, priceW: 4, klinesW: () => 2 },
+    futures: { nombre: "Futuros", bases: ["https://www.binance.com", "https://fapi.binance.com"], info: "/fapi/v1/exchangeInfo",
+      klines: "/fapi/v1/klines", price: "/fapi/v1/ticker/price", limit: 2400, infoW: 1, priceW: 2,
+      klinesW: (n) => (n < 100 ? 1 : n < 500 ? 2 : n <= 1000 ? 5 : 10) },
+  };
+  class ScanError extends Error {
+    constructor(message, fatal) { super(message); this.fatal = !!fatal; }
+  }
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const hostOf = (url) => url.replace(/^https?:\/\//, "");
+  class BinanceApi {
+    constructor(cfg, signal) { this.cfg = cfg; this.signal = signal; this.base = null; this.minute = 0; this.used = 0; this.budget = cfg.limit * 0.8; }
+    async reserve(weight) {  // reparte el peso por minuto que permite Binance
+      for (;;) {
+        const now = Date.now(), minute = Math.floor(now / 60000);
+        if (minute !== this.minute) { this.minute = minute; this.used = 0; }
+        if (this.used + weight <= this.budget || this.used === 0) { this.used += weight; return; }
+        await sleep((minute + 1) * 60000 - now + 250);
+      }
+    }
+    // ok(datos): comprueba que la respuesta tiene la forma esperada; si no, se prueba la siguiente dirección.
+    async get(path, params, weight, ok) {
+      const qs = params ? "?" + new URLSearchParams(params) : "";
+      const bases = this.base ? [this.base] : this.cfg.bases;
+      let lastError = null;
+      for (const base of bases) {
+        for (let attempt = 0; attempt < 4; attempt++) {
+          if (this.signal.aborted) throw new ScanError("Escaneo detenido.", true);
+          await this.reserve(weight);
+          let resp;
+          try {
+            resp = await fetch(base + path + qs, { signal: this.signal, cache: "no-store" });
+          } catch (err) {
+            if (this.signal.aborted) throw new ScanError("Escaneo detenido.", true);
+            lastError = new ScanError("El navegador no pudo conectar con " + hostOf(base) +
+              " (sin conexión, bloqueo del navegador o página abierta dentro de una app que no permite conexiones externas).", true);
+            if (!this.base) break;  // todavía probando direcciones: pasa a la siguiente
+            await sleep(1000 * 2 ** attempt);
+            continue;
+          }
+          if (resp.ok) {
+            let data;
+            try { data = await resp.json(); } catch (err) { data = undefined; }
+            if (data !== undefined && (!ok || ok(data))) { this.base = base; return data; }
+            lastError = new ScanError(hostOf(base) + " no devolvió datos de la API.", true);
+            break;
+          }
+          if (resp.status === 429) { lastError = new ScanError("Binance pidió esperar (429)."); await sleep(60000); continue; }
+          if (resp.status === 418) throw new ScanError("Binance ha bloqueado temporalmente tu IP por exceso de peticiones (418). Espera unos minutos.", true);
+          if (resp.status === 451 || resp.status === 403 || resp.status === 202) {
+            lastError = new ScanError("Binance rechaza las peticiones desde tu ubicación (" + resp.status + ") en " + hostOf(base) + ".", true);
+            break;
+          }
+          if (resp.status >= 500) { lastError = new ScanError("Error " + resp.status + " de Binance."); await sleep(1000 * 2 ** attempt); continue; }
+          throw new ScanError("Error " + resp.status + " en " + path + ".");
+        }
+      }
+      throw lastError || new ScanError("Binance no respondió.", true);
+    }
+  }
+  const liveApis = {}, liveDown = {}, pendingCandles = new Map(), liveNow = new Map();
+  const NEVER = new AbortController().signal;
+  const liveApi = (mercado) => liveApis[mercado] || (liveApis[mercado] = new BinanceApi(API[mercado], NEVER));
+  const row = (k) => [Number(k[0]), +k[1], +k[2], +k[3], +k[4], +k[5]];
+  const isList = (d) => Array.isArray(d);
+  const isInfo = (d) => !!d && Array.isArray(d.symbols);
+  function isFresh(it, tf) {
+    const e = chartEntry(it, tf);
+    return !!e && e.at > 0 && Date.now() - e.at < CHART_TTL;
+  }
+  // Descarga las velas de una moneda en esa temporalidad alrededor del día de la explosión. Si no se puede
+  // (sin conexión, Binance no responde), el gráfico usa las velas que ya traía el informe, si las hay.
+  function loadCandles(it, tf) {
+    const cfg = API[it.mercado];
+    if (!cfg || !TF_MS[tf] || isFresh(it, tf) || Date.now() - (liveDown[it.mercado] || 0) < 60000) {
+      return Promise.resolve(!!chartEntry(it, tf));
+    }
+    const key = chartKey(it, tf);
+    if (!pendingCandles.has(key)) {
+      const params = { symbol: it.simbolo, interval: tf, startTime: String(it.apertura - CHART_BEFORE * TF_MS[tf]), limit: String(CHART_LIMIT) };
+      pendingCandles.set(key, liveApi(it.mercado).get(cfg.klines, params, cfg.klinesW(CHART_LIMIT), isList)
+        .then((rows) => {
+          const data = rows.map(row);
+          if (!data.length) return !!chartEntry(it, tf);
+          charts.set(key, { rows: data, at: Date.now(), sd: {} });
+          const last = data[data.length - 1];
+          if (last[0] + TF_MS[tf] > Date.now()) liveNow.set(it.mercado + ":" + it.simbolo, last[4]);  // la vela en curso: precio actual
+          return true;
+        })
+        .catch((err) => { if (err && err.fatal) liveDown[it.mercado] = Date.now(); return !!chartEntry(it, tf); })
+        .finally(() => pendingCandles.delete(key)));
+    }
+    return pendingCandles.get(key);
+  }
+
+  // ---------- escáner en el navegador ----------
+  async function runPool(items, size, worker) {
+    let next = 0, failure = null;
+    async function lane() {
+      while (!failure && next < items.length) {
+        const i = next++;
+        try { await worker(items[i], i); } catch (err) { failure = failure || err; }
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(size, items.length) }, lane));
+    if (failure) throw failure;
+  }
+  const isStockTags = (tags) => (tags || []).some((t) => typeof t === "string" && t.toLowerCase().includes("stock"));
+  async function loadStockList() {
+    // 1) lista de productos de Binance; 2) copia publicada junto a la web (bstocks.json)
+    try {
+      const resp = await fetch(PRODUCTS_URL, { cache: "no-store" });
+      if (resp.ok) {
+        const set = new Set(((await resp.json()).data || []).filter((p) => p && isStockTags(p.tags)).map((p) => p.s));
+        if (set.size) return set;
+      }
+    } catch (err) { /* la web de Binance no permite consultarla desde otras páginas */ }
+    try {
+      const resp = await fetch("bstocks.json", { cache: "no-store" });
+      if (resp.ok) {
+        const data = await resp.json();
+        if (Array.isArray(data.simbolos) && data.simbolos.length) return new Set(data.simbolos);
+      }
+    } catch (err) { /* sin copia local */ }
+    return null;
+  }
+  function measure(k) {
+    const open = +k[1], high = +k[2], low = +k[3], close = +k[4];
+    return {
+      open, high, low, close, volumen: round(k.length > 7 ? +k[7] : +k[5] * close, 2),
+      pct_rango: low > 0 ? round((high - low) / low * 100, 4) : null,
+      pct_cuerpo: open > 0 ? round((close - open) / open * 100, 4) : null,
+    };
+  }
+  async function scanMarket(key, opts, report, signal) {
+    const cfg = API[key];
+    const api = new BinanceApi(cfg, signal);
+    const notes = [];
+    report(cfg.nombre + ": preparando…");
+    const info = await api.get(cfg.info, null, cfg.infoW, isInfo);
+    for (const r of info.rateLimits || []) {
+      if (r.rateLimitType === "REQUEST_WEIGHT" && r.interval === "MINUTE" && r.intervalNum === 1) api.budget = r.limit * 0.8;
+    }
+    let symbols = (info.symbols || []).filter((s) => s.status === "TRADING" && s.quoteAsset === "USDT" && !STABLES.has(s.baseAsset) &&
+      (key === "spot" ? s.isSpotTradingAllowed !== false : s.contractType === "PERPETUAL" && !NON_CRYPTO.has(s.underlyingType)));
+    if (key === "spot") {
+      const stocks = await loadStockList();
+      if (stocks) symbols = symbols.filter((s) => !stocks.has(s.symbol));
+      else notes.push("no se pudo saber qué pares son acciones tokenizadas (bStocks), así que pueden aparecer");
+    }
+    const open = opts.open;
+    const matches = [];
+    let analyzed = 0, done = 0, failed = 0;
+    await runPool(symbols, 8, async (s) => {
+      try {
+        // Dos velas diarias: la del día de análisis y la de la explosión.
+        const rows = await api.get(cfg.klines, { symbol: s.symbol, interval: "1d", startTime: String(open - DAY), limit: "2" }, cfg.klinesW(2), isList);
+        const day = rows.find((k) => Number(k[0]) === open);
+        if (!day) return;  // el par no tenía vela ese día
+        analyzed++;
+        const c = measure(day);
+        if (!((c.pct_rango ?? -1) >= MIN_PCT || (c.pct_cuerpo ?? -1) >= MIN_PCT)) return;
+        if (opts.minVolume > 0 && c.volumen < opts.minVolume) return;
+        const prev = rows.find((k) => Number(k[0]) === open - DAY);
+        matches.push(Object.assign({ mercado: key, simbolo: s.symbol, base: s.baseAsset, quote: s.quoteAsset,
+          fecha: labelOf(open), fecha_analisis: labelOf(open - DAY), apertura: open }, c, { analisis: prev ? measure(prev) : null }));
+      } catch (err) {
+        if (err.fatal) throw err;
+        failed++;
+      } finally {
+        report(cfg.nombre + ": " + (++done) + "/" + symbols.length + " pares");
+      }
+    });
+    if (failed) notes.push(failed + " pares no respondieron");
+    matches.sort(SORTS.rango);
+    return { market: { nombre: cfg.nombre, quote: "USDT", analizadas: analyzed, coincidencias: matches }, notes };
+  }
+  // Fecha por defecto: la última vela diaria completa (la anterior a la que se está construyendo).
+  function refreshDateInput(force) {
+    const input = $("scan-date");
+    const last = labelOf(lastClosedOpen());
+    const wasDefault = !input.value || input.value === input.dataset.last;
+    input.max = last;
+    input.dataset.last = last;
+    if (force || wasDefault || input.value > last) input.value = last;
+    $("scan-date-hint").textContent = "última completa: " + shortDate(last);
+  }
+  let scanController = null;
+  async function startScan(event) {
+    event.preventDefault();
+    if (scanController) { scanController.abort(); return; }
+    refreshDateInput(false);
+    const fecha = $("scan-date").value || labelOf(lastClosedOpen());
+    const open = openOf(fecha);
+    if (open > lastClosedOpen()) {
+      renderNotice("Esa vela no ha terminado. ", "La vela del " + dayTitle(fecha) + " todavía se está construyendo (cierra a las 19:00 " + ZONA.nombre + "). La última completa es la del " + dayTitle(labelOf(lastClosedOpen())) + ".", true);
+      return;
+    }
+    const opts = { market: $("scan-market").value, open, minVolume: Math.max(0, parseFloat($("scan-minvol").value) || 0), track: $("scan-track").checked };
+    store.set("scan", JSON.stringify({ market: opts.market, minVolume: opts.minVolume, track: opts.track }));
+    const keys = opts.market === "ambos" ? ["spot", "futures"] : [opts.market];
+    const go = $("scan-go"), status = $("scan-status");
+    scanController = new AbortController();
+    go.textContent = "Detener";
+    renderNotice();
+    const progress = {};
+    const report = (key) => (text) => { progress[key] = text; status.textContent = Object.values(progress).join(" · "); };
+    const settled = await Promise.allSettled(keys.map((k) => scanMarket(k, opts, report(k), scanController.signal)));
+    const aborted = scanController.signal.aborted;
+    scanController = null;
+    go.textContent = "Escanear";
+    const mercados = {}, problems = [];
+    settled.forEach((res, i) => {
+      const name = API[keys[i]].nombre;
+      if (res.status === "fulfilled") {
+        mercados[keys[i]] = res.value.market;
+        for (const n of res.value.notes) problems.push(name + ": " + n + ".");
+      } else {
+        problems.push(name + ": " + (res.reason && res.reason.message || "error desconocido"));
+      }
+    });
+    if (aborted) { status.textContent = "Escaneo detenido."; return; }
+    const done = "Escaneo terminado " + fmtTime(Date.now()) + ".";
+    status.textContent = done;
+    const saved = opts.track ? recordScan(fecha, mercados) : null;
+    if (saved) {
+      const text = done + " Guardado en el seguimiento (vela del " + dayTitle(fecha) + ")";
+      status.textContent = text + (ghConfig() ? "; subiendo a GitHub…" : " de este navegador.");
+      if (ghConfig()) {
+        syncPending().then((ok) => {
+          status.textContent = text + (ok ? " y en GitHub." : ". No se pudo subir a GitHub; se reintentará (ver Seguimiento).");
+        });
+      }
+    }
+    if (Object.keys(mercados).length) {
+      setData({ generado: new Date().toISOString(), fecha, fecha_analisis: labelOf(open - DAY), apertura: open, min_pct: MIN_PCT,
+        intervalos_grafico: CHART_TFS, orden: state.sort, mercados }, "escaneo");
+    }
+    if (problems.length) renderNotice("Aviso. ", problems.join(" "), !Object.keys(mercados).length);
+  }
+  $("scan-form").addEventListener("submit", startScan);
+  $("scan-form").addEventListener("focusin", () => refreshDateInput(false));
+  try {
+    const saved = readJSON("scan", null);
+    if (saved) {
+      if (saved.market) $("scan-market").value = saved.market;
+      if (saved.minVolume != null) $("scan-minvol").value = saved.minVolume;
+      if (saved.track === false) $("scan-track").checked = false;
+    }
+  } catch (err) { /* preferencias no válidas */ }
+
+  // ---------- seguimiento ----------
+  // Cada día del seguimiento es una vela diaria con explosiones: las monedas que subieron un 10 % o más, con
+  // su fecha de análisis (la vela anterior). Los escribe el workflow «Escaneo diario» en el repositorio
+  // (datos/seguimiento/AAAA-MM-DD.json) y también cada escaneo de esta página: en este navegador y, si se
+  // conecta, en GitHub. La web publicada lee todos los días de seguimiento.json, que genera el workflow «Web».
+  const TRACK_SORTS = {
+    rango: SORTS.rango,
+    cuerpo: SORTS.cuerpo,
+    desde: (a, b) => (b.desde ?? -Infinity) - (a.desde ?? -Infinity),
+    moneda: (a, b) => a.simbolo.localeCompare(b.simbolo),
+  };
+  const COIN_FIELDS = ["mercado", "simbolo", "base", "quote", "fecha", "fecha_analisis", "apertura", "open", "high", "low", "close",
+    "volumen", "pct_rango", "pct_cuerpo", "analisis"];
+  const track = { remote: {}, prices: {}, market: "todos", crit: "rango", minPct: MIN_PCT, sort: "rango", timer: null, sync: "", syncError: "", busy: false };
+  const GH_API = "https://api.github.com";
+  const GH_DIR = "datos/seguimiento";
+  class GhError extends Error {
+    constructor(status, message) { super(message); this.status = status; }
+  }
+  const localDays = () => readJSON("seguimiento", {});
+  const saveLocalDays = (days) => store.set("seguimiento", JSON.stringify(days));
+  const deletedDays = () => readJSON("seguimiento-borrados", {});
+  const saveDeletedDays = (days) => store.set("seguimiento-borrados", JSON.stringify(days));
+  const coinKey = (c) => c.mercado + ":" + c.simbolo;
+  function cleanCoin(c) { const out = {}; for (const f of COIN_FIELDS) out[f] = c[f] === undefined ? null : c[f]; return out; }
+  function dayHeader(fecha) {
+    return { fecha, fecha_analisis: labelOf(openOf(fecha) - DAY), apertura_utc: new Date(openOf(fecha)).toISOString().replace(".000Z", "Z") };
+  }
+  // Une dos versiones del mismo día: cada moneda (mercado + símbolo) una vez, con los datos más nuevos.
+  function mergeDay(a, b) {
+    const coins = new Map();
+    for (const c of [...((a && a.monedas) || []), ...((b && b.monedas) || [])]) {
+      if (c && c.simbolo && c.mercado) coins.set(coinKey(c), c);
+    }
+    const fecha = (b || a).fecha;
+    return Object.assign(dayHeader(fecha), { monedas: [...coins.values()].sort(SORTS.rango) });
+  }
+  function cleanDay(day) { return Object.assign(dayHeader(day.fecha), { monedas: day.monedas.map(cleanCoin) }); }
+  function allDays() {
+    const local = localDays(), deleted = deletedDays(), out = {};
+    for (const [fecha, day] of Object.entries(track.remote)) if (!deleted[fecha]) out[fecha] = day;
+    for (const [fecha, day] of Object.entries(local)) out[fecha] = out[fecha] ? mergeDay(out[fecha], day) : day;
+    return Object.values(out).filter((d) => d.monedas && d.monedas.length).sort((a, b) => (a.fecha < b.fecha ? 1 : -1));
+  }
+  function recordScan(fecha, mercados) {
+    const monedas = [];
+    for (const m of Object.values(mercados)) for (const c of m.coincidencias || []) monedas.push(cleanCoin(c));
+    if (!monedas.length) return null;
+    const days = localDays();
+    days[fecha] = Object.assign(mergeDay(days[fecha], { fecha, monedas }), { pendiente: true });
+    // Si el navegador se queda sin espacio, se olvidan primero los días más antiguos que ya están en GitHub
+    // y, si no basta, los más antiguos de todos (el que se acaba de escanear nunca).
+    const order = Object.keys(days).filter((f) => f !== fecha).sort((a, b) => (days[a].pendiente - days[b].pendiente) || (a < b ? -1 : 1));
+    while (order.length && JSON.stringify(days).length > 2500000) delete days[order.shift()];
+    saveLocalDays(days);
+    const deleted = deletedDays();
+    if (deleted[fecha]) { delete deleted[fecha]; saveDeletedDays(deleted); }
+    return fecha;
+  }
+
+  // GitHub: la clave se guarda solo en este navegador y solo se envía a api.github.com.
+  function ghConfig() { const c = readJSON("github", null); return c && c.token && c.owner && c.repo ? c : null; }
+  function ghMessage(status, detail) {
+    if (status === 401) return "la clave de GitHub no es válida o ha caducado";
+    if (status === 403) return "la clave no tiene permiso para escribir (Contents: Read and write)";
+    if (status === 404) return "no se encuentra el repositorio o la clave no tiene acceso a él";
+    return "GitHub respondió " + status + (detail ? " (" + detail + ")" : "");
+  }
+  async function gh(cfg, method, path, body) {
+    const headers = { Accept: "application/vnd.github+json", Authorization: "Bearer " + cfg.token, "X-GitHub-Api-Version": "2022-11-28" };
+    if (body) headers["Content-Type"] = "application/json";
+    let resp;
+    try {
+      resp = await fetch(GH_API + path, { method, headers, body: body ? JSON.stringify(body) : undefined, cache: "no-store" });
+    } catch (err) {
+      throw new GhError(0, "no hay conexión con GitHub");
+    }
+    if (method === "GET" && resp.status === 404) return null;
+    if (!resp.ok) {
+      let detail = "";
+      try { detail = (await resp.json()).message || ""; } catch (err) { /* sin detalle */ }
+      throw new GhError(resp.status, ghMessage(resp.status, detail));
+    }
+    return resp.status === 204 ? null : resp.json();
+  }
+  const b64encode = (text) => { let bin = ""; for (const byte of new TextEncoder().encode(text)) bin += String.fromCharCode(byte); return btoa(bin); };
+  const b64decode = (b64) => new TextDecoder().decode(Uint8Array.from(atob(b64.replace(/\s/g, "")), (ch) => ch.charCodeAt(0)));
+  const dayFile = (cfg, fecha) => "/repos/" + encodeURIComponent(cfg.owner) + "/" + encodeURIComponent(cfg.repo) + "/contents/" + GH_DIR + "/" + fecha + ".json";
+  async function pushDay(cfg, day) {
+    const path = dayFile(cfg, day.fecha);
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const current = await gh(cfg, "GET", path + "?ref=" + encodeURIComponent(cfg.branch));
+      let merged = day;
+      if (current && current.content) {
+        try { merged = mergeDay(JSON.parse(b64decode(current.content)), day); } catch (err) { /* archivo dañado: se reemplaza */ }
+      }
+      merged = cleanDay(merged);
+      const body = { message: "Seguimiento " + day.fecha + " (" + merged.monedas.length + " monedas)",
+        content: b64encode(JSON.stringify(merged, null, 1) + "\n"), branch: cfg.branch };
+      if (current) body.sha = current.sha;
+      try {
+        await gh(cfg, "PUT", path, body);
+        return merged;
+      } catch (err) {
+        if (err.status !== 409 && err.status !== 422) throw err;  // otro dispositivo (o el workflow) guardó a la vez: se vuelve a unir
+      }
+    }
+    throw new GhError(409, "otro dispositivo estaba guardando a la vez");
+  }
+  let syncing = null;
+  function syncPending() {
+    const cfg = ghConfig();
+    if (!cfg) return Promise.resolve(false);
+    if (syncing) return syncing.then(() => syncPending());
+    syncing = (async () => {
+      const pending = Object.values(localDays()).filter((d) => d.pendiente);
+      if (!pending.length) return true;
+      track.busy = true;
+      track.sync = "Subiendo a GitHub…";
+      track.syncError = "";
+      renderSync();
+      try {
+        for (const day of pending) {
+          const merged = await pushDay(cfg, day);
+          const days = localDays();
+          const now = days[day.fecha];
+          if (now) {
+            // Si mientras tanto se escaneó otra vez ese día, queda pendiente para la próxima subida.
+            const changed = now.monedas.length !== day.monedas.length;
+            days[day.fecha] = Object.assign(mergeDay(merged, now), { pendiente: changed });
+            saveLocalDays(days);
+          }
+        }
+        track.sync = "Subido a las " + fmtTime(Date.now()) + ".";
+        return true;
+      } catch (err) {
+        track.syncError = err.message;
+        return false;
+      } finally {
+        syncing = null;
+        track.busy = false;
+        renderSync();
+        if (!$("view-track").hidden) renderTracking();
+      }
+    })();
+    return syncing;
+  }
+  async function deleteDay(fecha) {
+    const cfg = ghConfig();
+    if (track.remote[fecha] && !cfg) {
+      showTrackNotice("No se puede borrar. ", "Este día está guardado en GitHub; conecta la web con GitHub para borrarlo también de allí.");
+      renderTracking();
+      return;
+    }
+    if (cfg) {
+      try {
+        const path = dayFile(cfg, fecha);
+        const current = await gh(cfg, "GET", path + "?ref=" + encodeURIComponent(cfg.branch));
+        if (current) await gh(cfg, "DELETE", path, { message: "Borrar seguimiento " + fecha, sha: current.sha, branch: cfg.branch });
+      } catch (err) {
+        showTrackNotice("No se pudo borrar. ", "GitHub: " + err.message + ".");
+        renderTracking();
+        return;
+      }
+      const deleted = deletedDays();
+      deleted[fecha] = Date.now();  // la web publicada tarda un minuto en enterarse
+      saveDeletedDays(deleted);
+    }
+    const days = localDays();
+    delete days[fecha];
+    saveLocalDays(days);
+    showTrackNotice();
+    renderTracking();
+  }
+  async function loadRemote() {
+    try {
+      const resp = await fetch("seguimiento.json?t=" + Date.now(), { cache: "no-store" });
+      if (!resp.ok) return;
+      const data = await resp.json();
+      const days = {};
+      for (const d of data.dias || []) {
+        if (d && /^\d{4}-\d{2}-\d{2}$/.test(d.fecha) && Array.isArray(d.monedas)) days[d.fecha] = mergeDay(null, d);
+      }
+      track.remote = days;
+      const deleted = deletedDays();
+      let changed = false;
+      for (const fecha of Object.keys(deleted)) if (!days[fecha]) { delete deleted[fecha]; changed = true; }
+      if (changed) saveDeletedDays(deleted);
+    } catch (err) { /* página abierta como archivo o en otro alojamiento: solo hay datos de este navegador */ }
+  }
+  async function refreshPrices() {
+    const markets = [...new Set(allDays().flatMap((d) => d.monedas.map((c) => c.mercado)))].filter((m) => API[m]);
+    if (!markets.length) { renderTracking(); return; }
+    const button = $("track-refresh");
+    button.disabled = true;
+    $("track-status").textContent = "Actualizando precios…";
+    const problems = [];
+    await Promise.all(markets.map(async (m) => {
+      try {
+        const rows = await liveApi(m).get(API[m].price, null, API[m].priceW, isList);
+        track.prices[m] = new Map(rows.map((r) => [r.symbol, +r.price]));
+      } catch (err) {
+        problems.push(API[m].nombre + ": " + err.message);
+      }
+    }));
+    button.disabled = false;
+    $("track-status").textContent = "Precios de las " + fmtTime(Date.now()) + " · se actualizan cada minuto";
+    showTrackNotice(problems.length ? "Aviso. " : "", problems.join(" "));
+    renderTracking();
+  }
+  function showTrackNotice(label, text) {
+    const n = $("track-notice");
+    n.textContent = "";
+    n.hidden = !(label || text);
+    if (label) n.append(h("b", { text: label }));
+    if (text) n.append(text);
+  }
+
+  // ---------- seguimiento: pantalla ----------
+  function withPrices(day) {
+    return byMarket(day.monedas, track.market)
+      .filter((c) => passes(c, track.crit, track.minPct))
+      .map((c) => {
+        const prices = track.prices[c.mercado];
+        const now = prices ? prices.get(c.simbolo) : undefined;
+        const desde = now != null && c.close ? (now - c.close) / c.close * 100 : null;
+        return Object.assign({}, c, { ahora: now == null ? null : now, desde });
+      });
+  }
+  function summarize(coins) {
+    const priced = coins.filter((c) => c.desde != null);
+    if (!priced.length) return { n: 0 };
+    const sorted = [...priced].sort((a, b) => b.desde - a.desde);
+    return {
+      n: priced.length, avg: priced.reduce((sum, c) => sum + c.desde, 0) / priced.length,
+      up: priced.filter((c) => c.desde > 0).length, down: priced.filter((c) => c.desde < 0).length,
+      best: sorted[0], worst: sorted[sorted.length - 1],
+    };
+  }
+  function changeBar(pct) {
+    if (pct == null) return null;
+    const bar = h("span", { class: "chgbar", "aria-hidden": "true" });
+    const fill = h("i");
+    fill.style.width = Math.min(100, Math.abs(pct) / 25 * 100) + "%";  // barra llena = 25 % o más
+    bar.append(fill);
+    return bar;
+  }
+  const ICON_CHEVRON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>';
+  function isOpen(fecha, index) {
+    const states = readJSON("seguimiento-abiertos", {});
+    return fecha in states ? states[fecha] : index === 0;  // por defecto, solo el día más reciente
+  }
+  function toggleDay(fecha, index) {
+    const states = readJSON("seguimiento-abiertos", {});
+    states[fecha] = !isOpen(fecha, index);
+    store.set("seguimiento-abiertos", JSON.stringify(states));
+    renderTracking();
+  }
+  function deleteControl(fecha) {
+    const wrap = h("span", { class: "confirm" });
+    const ask = h("button", { class: "btn small", type: "button", text: "Borrar" });
+    ask.addEventListener("click", () => {
+      wrap.textContent = "";
+      const yes = h("button", { class: "btn small danger", type: "button", text: "Sí, borrar" });
+      const no = h("button", { class: "btn small", type: "button", text: "No" });
+      yes.addEventListener("click", () => { yes.disabled = true; no.disabled = true; deleteDay(fecha); });
+      no.addEventListener("click", () => { wrap.textContent = ""; wrap.append(ask); });
+      wrap.append(h("span", { text: "¿Borrar este día del seguimiento?" }), yes, no);
+      no.focus();
+    });
+    wrap.append(ask);
+    return wrap;
+  }
+  // Fecha larga («30 de septiembre») y corta («30 sept», en el móvil).
+  function dateCell(label) {
+    const wrap = document.createDocumentFragment();
+    wrap.append(h("span", { class: "d-long", text: dayTitle(label) }), h("span", { class: "d-short", text: shortDate(label) }));
+    return wrap;
+  }
+  function coinTable(day, coins) {
+    const table = h("table", { class: "coins" });
+    table.append(h("thead", null, h("tr", null,
+      h("th", { text: "Moneda" }),
+      h("th", { text: "Fecha de explosión" }),
+      h("th", { class: "ana", text: "Fecha de análisis" }),
+      h("th", { class: "r", text: "Mín→Máx" }),
+      h("th", { class: "r", text: "Apert→Cierre" }),
+      h("th", { class: "r", text: "Cierre", title: "Precio de cierre de la vela de la explosión" }),
+      h("th", { class: "r", text: "Precio actual" }),
+      h("th", { class: "r", text: "Desde el cierre", title: "Variación del precio actual respecto al cierre de la vela de la explosión" }))));
+    const body = h("tbody");
+    coins.forEach((c, i) => {
+      const tr = h("tr", { tabindex: "0", title: "Ver el gráfico de " + c.simbolo },
+        h("td", { class: "c-coin" }, h("span", { class: "coin" }, c.base || c.simbolo, h("small", { text: c.quote ? "/" + c.quote : "" })),
+          h("span", { class: "badge", text: MARKET_NAMES[c.mercado] || c.mercado })),
+        h("td", { class: "c-exp", "data-label": "Explosión" }, dateCell(c.fecha)),
+        h("td", { class: "c-ana", "data-label": "Análisis" }, dateCell(c.fecha_analisis)),
+        h("td", { class: "r num c-rango hot", "data-label": "Mín→Máx", text: fmtPct(c.pct_rango) }),
+        h("td", { class: "r num c-cuerpo " + (c.pct_cuerpo >= 0 ? "up" : "down"), "data-label": "Apert→Cierre", text: fmtPct(c.pct_cuerpo) }),
+        h("td", { class: "r num c-close", "data-label": "Cierre", text: fmtPrice(c.close) }),
+        h("td", { class: "r num c-now", "data-label": "Ahora", text: c.ahora == null ? "—" : fmtPrice(c.ahora) }),
+        h("td", { class: "r num c-since " + (c.desde == null ? "" : c.desde >= 0 ? "up" : "down") }, c.desde == null ? "—" : fmtPct(c.desde), changeBar(c.desde)));
+      const open = () => openTrackedChart(coins, i);
+      tr.addEventListener("click", open);
+      tr.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } });
+      body.append(tr);
+    });
+    table.append(body);
+    return h("div", { class: "day-body" }, table);
+  }
+  function dayCard(day, index) {
+    const coins = withPrices(day).sort(TRACK_SORTS[track.sort] || TRACK_SORTS.rango);
+    const open = isOpen(day.fecha, index);
+    const s = summarize(coins);
+    const toggle = h("button", { class: "day-toggle", type: "button", "aria-expanded": String(open) });
+    toggle.innerHTML = ICON_CHEVRON;
+    toggle.append(h("h2", { text: "Vela del " + dayTitle(day.fecha) }));
+    toggle.addEventListener("click", () => toggleDay(day.fecha, index));
+    const stats = h("div", { class: "day-stats" },
+      h("span", null, h("b", { text: String(coins.length) }), coins.length === 1 ? " moneda" : " monedas"),
+      h("span", null, "Fecha de análisis ", h("b", { class: "ana", text: dayTitle(day.fecha_analisis || labelOf(openOf(day.fecha) - DAY)) })),
+      s.n ? h("span", null, "Desde el cierre: media ", h("b", { class: s.avg >= 0 ? "up" : "down", text: fmtPct(s.avg) })) : null,
+      s.n ? h("span", null, h("b", { class: "up", text: "▲ " + s.up }), " suben · ", h("b", { class: "down", text: "▼ " + s.down }), " bajan") : null,
+      s.n > 1 ? h("span", null, "Mejor ", h("b", { text: (s.best.base || s.best.simbolo) + " " + fmtPct(s.best.desde) })) : null,
+      h("span", { text: daysAgo(day.fecha) }));
+    const cardEl = h("article", { class: "day" },
+      h("header", { class: "day-head" }, toggle, stats, h("div", { class: "day-actions" }, deleteControl(day.fecha))));
+    if (open) cardEl.append(coins.length ? coinTable(day, coins) : h("p", { class: "gh-note", style: "padding: 0 14px 12px", text: "Ninguna moneda con este filtro." }));
+    return cardEl;
+  }
+  function renderSync() {
+    const box = $("track-sync");
+    box.textContent = "";
+    const cfg = ghConfig();
+    if (!cfg) {
+      const connect = h("button", { class: "btn small", type: "button", text: "Guardar también en GitHub" });
+      connect.addEventListener("click", () => showGhForm(true));
+      box.append(h("span", { text: "Tus escaneos se guardan solo en este navegador." }), connect);
+      return;
+    }
+    box.append(h("span", null, "Guardado en GitHub: ", h("b", { text: cfg.owner + "/" + cfg.repo })));
+    if (track.syncError) box.append(h("span", { class: "down", text: "No se pudo subir: " + track.syncError + "." }));
+    else if (track.sync) box.append(h("span", { text: track.sync }));
+    const pending = Object.values(localDays()).filter((d) => d.pendiente).length;
+    if (pending && !track.busy) {
+      const retry = h("button", { class: "btn small", type: "button", text: pending === 1 ? "Subir el día pendiente" : "Subir " + pending + " días pendientes" });
+      retry.addEventListener("click", () => syncPending());
+      box.append(retry);
+    }
+    const off = h("button", { class: "btn small", type: "button", text: "Desconectar" });
+    off.addEventListener("click", () => { store.set("github", ""); track.sync = ""; track.syncError = ""; renderSync(); });
+    box.append(off);
+  }
+  function renderTracking() {
+    const days = allDays();
+    const everything = days.flatMap((d) => d.monedas);
+    const pick = (fn) => (v) => { fn(v); renderTracking(); };
+    marketButtons($("track-market"), everything, track.market, pick((k) => { track.market = k; }), track.crit, track.minPct);
+    critButtons($("track-crit"), byMarket(everything, track.market), track.crit, pick((k) => {
+      track.crit = k;
+      if (track.sort === "rango" || track.sort === "cuerpo") { track.sort = k; $("track-sort").value = k; }
+    }), track.minPct);
+    renderSync();
+    $("track-note").textContent = "Cada fecha es una vela diaria de Binance: abre a las 00:00 UTC (las 19:00 en " + ZONA.nombre +
+      ") y lleva la fecha con la que Binance la muestra en " + ZONA.nombre + ", así que termina de construirse al día siguiente a las 19:00. " +
+      "La fecha de análisis es la vela anterior a la explosión. Pulsa una moneda para ver su gráfico.";
+    $("track-sort").value = track.sort;
+    $("track-minpct").value = String(track.minPct);
+    const list = $("track-days");
+    list.textContent = "";
+    if (!days.length) {
+      const go = h("button", { class: "btn", type: "button", text: "Ir al escáner" });
+      go.addEventListener("click", () => { location.hash = ""; });
+      list.append(h("div", { class: "empty" },
+        h("p", { style: "margin: 0 0 12px", text: "Todavía no hay seguimientos. Cada día el escaneo automático (GitHub Actions) guarda aquí las monedas cuya vela diaria subió un 10 % o más, y también se guarda cada escaneo que hagas en esta página." }),
+        go));
+      return;
+    }
+    days.forEach((day, i) => list.append(dayCard(day, i)));
+  }
+  // Abre una moneda del seguimiento en el visor de gráficos, con la explosión y el análisis marcados.
+  function openTrackedChart(coins, index) {
+    if (!state.trackSaved) state.trackSaved = { view: state.view, current: state.current, vtf: state.vtf, cut: state.cut };
+    state.view = coins;
+    openViewer(index);
+  }
+  function showGhForm(show) {
+    $("gh-form").hidden = !show;
+    if (!show) return;
+    const cfg = readJSON("github", null);
+    const m = location.hostname.match(/^([^.]+)\.github\.io$/i);
+    const repo = location.pathname.split("/").filter(Boolean)[0];
+    $("gh-repo").value = cfg && cfg.owner ? cfg.owner + "/" + cfg.repo : m && repo ? m[1] + "/" + repo : "";
+    $("gh-token").value = "";
+    $("gh-msg").textContent = "";
+    $("gh-token").focus();
+  }
+  async function connectGitHub(event) {
+    event.preventDefault();
+    const [owner, repo] = $("gh-repo").value.trim().replace(/^https?:\/\/github\.com\//i, "").replace(/\.git$/i, "").split("/");
+    const token = $("gh-token").value.trim();
+    const msg = $("gh-msg");
+    if (!owner || !repo || !token) { msg.textContent = "Escribe el repositorio (usuario/repositorio) y la clave."; return; }
+    msg.textContent = "Comprobando…";
+    try {
+      const info = await gh({ token }, "GET", "/repos/" + encodeURIComponent(owner) + "/" + encodeURIComponent(repo));
+      if (!info) throw new GhError(404, ghMessage(404));
+      const [o, r] = String(info.full_name || owner + "/" + repo).split("/");
+      store.set("github", JSON.stringify({ owner: o, repo: r, branch: info.default_branch || "main", token }));
+      showGhForm(false);
+      track.sync = "Conectado.";
+      track.syncError = "";
+      renderSync();
+      await syncPending();  // sube lo que estaba guardado solo en este navegador
+    } catch (err) {
+      msg.textContent = "No se pudo conectar: " + err.message + ".";
+    }
+  }
+  function showView(view) {
+    const tracking = view === "track";
+    document.body.classList.toggle("tracking", tracking);
+    $("view-track").hidden = !tracking;
+    for (const b of $("views").querySelectorAll("button")) b.setAttribute("aria-pressed", String((b.dataset.view === "track") === tracking));
+    clearInterval(track.timer);
+    track.timer = null;
+    if (!tracking) return;
+    renderTracking();
+    loadRemote().then(() => { renderTracking(); refreshPrices(); });
+    track.timer = setInterval(() => { if (document.visibilityState === "visible") refreshPrices(); }, 60000);
+  }
+  for (const b of $("views").querySelectorAll("button")) {
+    b.addEventListener("click", () => { location.hash = b.dataset.view === "track" ? "seguimiento" : ""; });
+  }
+  window.addEventListener("hashchange", () => showView(location.hash === "#seguimiento" ? "track" : "scan"));
+  $("track-sort").addEventListener("change", (e) => { track.sort = e.target.value; store.set("seguimiento-orden", track.sort); renderTracking(); });
+  $("track-minpct").addEventListener("change", (e) => { track.minPct = Number(e.target.value) || MIN_PCT; renderTracking(); });
+  $("track-refresh").addEventListener("click", () => refreshPrices());
+  $("gh-form").addEventListener("submit", connectGitHub);
+  $("gh-cancel").addEventListener("click", () => showGhForm(false));
+  track.sort = TRACK_SORTS[store.get("seguimiento-orden")] ? store.get("seguimiento-orden") : track.sort;
+
+  // ---------- arranque ----------
+  // Sin informe incrustado, el escáner muestra el último día del seguimiento (el escaneo automático de cada día).
+  function showLatestTracked() {
+    if (state.data) return;
+    const day = allDays()[0];
+    if (!day) {
+      renderNotice("Listo para escanear. ", "Pulsa «Escanear» para buscar en Binance las monedas cuya última vela diaria completa subió un " + MIN_PCT +
+        " % o más (de mínimo a máximo o de apertura a cierre). También puedes elegir otra fecha o abrir un informe con «Cargar informe».");
+      return;
+    }
+    const mercados = {};
+    for (const c of day.monedas) (mercados[c.mercado] = mercados[c.mercado] || { nombre: MARKET_NAMES[c.mercado] || c.mercado, coincidencias: [] }).coincidencias.push(c);
+    setData({ fecha: day.fecha, fecha_analisis: day.fecha_analisis, apertura: openOf(day.fecha), min_pct: MIN_PCT, intervalos_grafico: CHART_TFS, mercados }, "seguimiento");
+  }
+  state.sort = SORTS[store.get("sort")] ? store.get("sort") : state.sort;
+  state.tf = CHART_TFS.includes(store.get("tf")) ? store.get("tf") : state.tf;
+  fillPctSelect($("minpct"), state.minPct);
+  fillPctSelect($("track-minpct"), track.minPct);
+  setSize(store.get("size") || "m");
+  refreshDateInput(true);
+  let initial = null;
+  try { initial = JSON.parse($("scanner-data").textContent); } catch (e) { initial = null; }
+  if (initial && initial.mercados) {
+    setData(initial, "informe");
+  } else {
+    showLatestTracked();
+    loadRemote().then(() => {
+      if ($("viewer").hidden && (!state.data || state.origin === "seguimiento")) { state.data = null; showLatestTracked(); }
+    });
+  }
+  if (!window.LightweightCharts) {
+    renderNotice("Sin gráficos. ", "No se pudo cargar la librería de gráficos; revisa tu conexión a internet.", true);
+  }
+  if (location.hash === "#seguimiento") showView("track");
+  syncPending();  // días guardados sin conexión con GitHub
+})();
+</script>
+</body>
+</html>
