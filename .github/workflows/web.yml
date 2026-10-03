@@ -1,0 +1,63 @@
+name: Web
+
+# Publica la web (GitHub Pages) con el seguimiento al día: une datos/seguimiento/*.json en seguimiento.json
+# y añade la lista de acciones tokenizadas de Binance (bstocks.json) para descartarlas del escáner.
+# Se ejecuta en cada cambio en main (incluidos los guardados que hace la web con la clave de GitHub) y
+# después de cada «Escaneo diario». Solo despliega si GitHub Pages está activado con «Source: GitHub Actions».
+on:
+  push:
+    branches: [main]
+  workflow_run:
+    workflows: ["Escaneo diario"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      enabled: ${{ steps.pages.outputs.enabled }}
+    steps:
+      - id: pages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          build_type=$(gh api "repos/${{ github.repository }}/pages" --jq .build_type 2>/dev/null || true)
+          echo "GitHub Pages: ${build_type:-desactivado}"
+          if [ "$build_type" = "workflow" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Web sin publicar::Activa GitHub Pages con «Source: GitHub Actions» (ver README)."
+          fi
+
+  deploy:
+    needs: check
+    if: needs.check.outputs.enabled == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}  # con el último seguimiento guardado
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - run: python -m scanner_pump.web site --bstocks --seguimiento datos/seguimiento
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v4
