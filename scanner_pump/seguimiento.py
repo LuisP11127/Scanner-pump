@@ -7,15 +7,15 @@ análisis (la vela anterior) y los datos de las dos velas::
      "fecha": "2026-10-01",            # vela de la explosión (como la muestra Binance en hora Lima)
      "fecha_analisis": "2026-09-30",   # la vela anterior, la del análisis
      "apertura_utc": "2026-10-02T00:00:00Z",
-     "monedas": [{"mercado": "spot", "simbolo": "XXXUSDT", "pct_rango": 23.4, "min_hora": ..., ...}, ...]
+     "monedas": [{"mercado": "spot", "simbolo": "XXXUSDT", "pct_rango": 23.4, ...}, ...]
     }
-
-``pct_rango`` es la subida del mínimo a un máximo posterior (con sus precios y horas en ``min_*`` / ``max_*``,
-calculados con velas de ``intradia``). Las monedas guardadas antes de este criterio no tienen ``intradia``:
-al unir un día, las de un mercado se sustituyen en cuanto llega un escaneo nuevo de ese mercado.
 
 Los escriben el workflow «Escaneo diario» y la web (si se conecta con GitHub). El workflow «Web» los
 une en ``seguimiento.json`` al publicar la página.
+
+Entre el 6 y el 7 de octubre de 2026 el escáner midió Mín→Máx exigiendo que el mínimo fuera antes que el
+máximo (con velas de 5 minutos). Esas monedas llevan el campo ``intradia`` y se consideran obsoletas: al unir
+un día, las de un mercado se sustituyen en cuanto llega un escaneo de ese mercado con la medida original.
 """
 
 from __future__ import annotations
@@ -32,8 +32,7 @@ from .fechas import analysis_label, open_of
 DAY_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 COIN_FIELDS = (
     "mercado", "simbolo", "base", "quote", "fecha", "fecha_analisis", "apertura",
-    "open", "high", "low", "close", "volumen", "pct_rango", "pct_cuerpo",
-    "min_precio", "min_hora", "max_precio", "max_hora", "intradia", "analisis",
+    "open", "high", "low", "close", "volumen", "pct_rango", "pct_cuerpo", "analisis",
 )
 
 
@@ -42,7 +41,15 @@ def coin_key(coin: dict) -> str:
 
 
 def clean_coin(coin: dict) -> dict:
-    return {f: coin.get(f) for f in COIN_FIELDS}
+    out = {f: coin.get(f) for f in COIN_FIELDS}
+    if is_obsolete(coin):
+        out["intradia"] = coin["intradia"]  # se conserva la marca hasta que se vuelva a escanear
+    return out
+
+
+def is_obsolete(coin: dict) -> bool:
+    """Guardada con la medida que exigía el mínimo antes que el máximo (ya no se usa)."""
+    return bool(coin.get("intradia"))
 
 
 def make_day(fecha: date, coins: Iterable[dict]) -> dict:
@@ -55,24 +62,19 @@ def make_day(fecha: date, coins: Iterable[dict]) -> dict:
     }
 
 
-def is_legacy(coin: dict) -> bool:
-    """Guardada con el criterio antiguo (mínimo y máximo del día sin mirar cuál fue antes)."""
-    return not coin.get("intradia")
-
-
 def merge_days(old: Optional[dict], new: dict) -> dict:
     """Une dos versiones del mismo día: cada moneda (mercado + símbolo) una vez, con los datos más nuevos.
 
-    Las monedas del criterio antiguo de un mercado se descartan si ese mercado ya tiene datos nuevos.
+    Las monedas obsoletas de un mercado se descartan si ese mercado ya tiene datos con la medida actual.
     """
     valid = [
         c for day in (old, new) for c in (day or {}).get("monedas") or []
         if isinstance(c, dict) and c.get("mercado") and c.get("simbolo")
     ]
-    fresh_markets = {c["mercado"] for c in valid if not is_legacy(c)}
+    current_markets = {c["mercado"] for c in valid if not is_obsolete(c)}
     coins: dict[str, dict] = {}
     for c in valid:
-        if is_legacy(c) and c["mercado"] in fresh_markets:
+        if is_obsolete(c) and c["mercado"] in current_markets:
             continue
         coins[coin_key(c)] = clean_coin(c)
     merged = dict(new)
