@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
       fecha:
-        description: "Vela a escanear (AAAA-MM-DD, fecha en hora Lima). Vacío = la última vela completa"
+        description: "Vela a escanear (AAAA-MM-DD, fecha en hora Lima); varias, separadas por espacios. Vacío = la última vela completa"
         required: false
         default: ""
       mercado:
@@ -35,7 +35,7 @@ concurrency:
 jobs:
   escanear:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     env:
       FECHA: ${{ inputs.fecha }}
       MERCADO: ${{ inputs.mercado || 'ambos' }}
@@ -58,16 +58,22 @@ jobs:
         run: |
           import os, pathlib, subprocess, sys
           os.makedirs("reportes", exist_ok=True)
-          cmd = [sys.executable, "-m", "scanner_pump", "-m", os.environ["MERCADO"], "--no-abrir",
-                 "--html", "reportes/scanner-pump.html", "--json", "reportes/scanner-pump.json",
-                 "--csv", "reportes/scanner-pump.csv", "--seguimiento", "reportes/seguimiento"]
-          fecha = os.environ.get("FECHA", "").strip()
-          if fecha:
-              cmd += ["--fecha", fecha]
-          proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8")
-          print(proc.stdout)
-          pathlib.Path("reportes/salida.txt").write_text(proc.stdout, encoding="utf-8")
-          sys.exit(proc.returncode)
+          # Una o varias fechas (para volver a escanear días pasados); sin fecha, la última vela completa.
+          fechas = os.environ.get("FECHA", "").replace(",", " ").split() or [""]
+          salidas, code = [], 0
+          for fecha in fechas:
+              name = "reportes/scanner-pump" + (f"_{fecha}" if fecha else "")
+              cmd = [sys.executable, "-m", "scanner_pump", "-m", os.environ["MERCADO"], "--no-abrir",
+                     "--html", name + ".html", "--json", name + ".json", "--csv", name + ".csv",
+                     "--seguimiento", "reportes/seguimiento"]
+              if fecha:
+                  cmd += ["--fecha", fecha]
+              proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8")
+              print(proc.stdout)
+              salidas.append(proc.stdout.rstrip())
+              code = code or proc.returncode
+          pathlib.Path("reportes/salida.txt").write_text("\n\n".join(salidas) + "\n", encoding="utf-8")
+          sys.exit(code)
 
       # Se une con lo último del repositorio (la web también guarda ahí sus escaneos) y se reintenta si
       # alguien guardó a la vez.

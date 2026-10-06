@@ -96,8 +96,8 @@ actualiza: al llegar los datos nuevos de un mercado, se quitan las monedas antig
 | **Tests** (`tests.yml`) | En cada pull request y cambio en `main`. | Pasa los tests y comprueba la huella de la librería de gráficos. |
 
 **Escaneo manual:** **Actions → Escaneo diario → Run workflow**. Puedes dejar la fecha vacía (última vela
-completa) o escribir otra (`AAAA-MM-DD`, fecha de la vela en hora Lima) para rellenar días pasados, elegir el
-mercado y si se guarda en el seguimiento.
+completa) o escribir una o varias fechas separadas por espacios (`2026-10-01 2026-10-02`, fecha de la vela en
+hora Lima) para rellenar o volver a escanear días pasados, elegir el mercado y si se guarda en el seguimiento.
 
 ### Puesta en marcha
 
