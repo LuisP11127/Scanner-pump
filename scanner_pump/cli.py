@@ -27,7 +27,7 @@ def build_parser() -> argparse.ArgumentParser:
         prog="scanner-pump",
         description=(
             "Scanner de Binance (spot y futuros): lista las criptomonedas cuya vela diaria subió un 10 %% o más "
-            "de un mínimo a un máximo posterior (el mínimo tiene que ir antes que el máximo) o de apertura a cierre."
+            "de mínimo a máximo o de apertura a cierre."
         ),
     )
     p.add_argument("-m", "--mercado", choices=["spot", "futures", "ambos"], default="ambos",
@@ -113,8 +113,6 @@ def render_result(result: ScanResult, order: str, top: Optional[int]) -> str:
         notes.append(f"{result.skipped_stocks} acciones tokenizadas excluidas")
     if result.skipped_volume:
         notes.append(f"{result.skipped_volume} descartadas por volumen")
-    if result.max_before_min:
-        notes.append(f"{result.max_before_min} descartadas porque el máximo fue antes del mínimo")
     if result.no_candle:
         notes.append(f"{result.no_candle} sin vela ese día")
     if result.errors:
@@ -125,33 +123,30 @@ def render_result(result: ScanResult, order: str, top: Optional[int]) -> str:
     if not shown:
         return f"{title}\n  Ninguna vela subió {config.min_pct:g}% o más."
 
-    headers = ["#", "Símbolo", "Mín→Máx", "Hora mín→máx (UTC)", "Apert→Cierre", "Apertura", "Cierre",
+    headers = ["#", "Símbolo", "Mín→Máx", "Apert→Cierre", "Apertura", "Máximo", "Mínimo", "Cierre",
                "Día análisis", "Vol. vela"]
     rows = [
         [
             str(n),
             e.symbol,
             format_pct(e.pct_rango),
-            f"{utc_hour(e.rise.low_time)}→{utc_hour(e.rise.high_time)}",
             format_pct(e.pct_cuerpo) + (" ✓" if e.pct_cuerpo >= config.min_pct else ""),
             format_price(e.candle.open),
+            format_price(e.candle.high),
+            format_price(e.candle.low),
             format_price(e.candle.close),
             format_pct(e.analysis.pct_cuerpo) if e.analysis else "-",
             format_volume(e.candle.quote_volume),
         ]
         for n, e in enumerate(shown, 1)
     ]
-    table = render_table(headers, rows, right_align={0, 2, 4, 5, 6, 7, 8})
+    table = render_table(headers, rows, right_align={0, 2, 3, 4, 5, 6, 7, 8, 9})
     footer = f"\n  … y {len(explosions) - len(shown)} más (quita --top para verlas todas)" if len(shown) < len(explosions) else ""
     return f"{title}\n{table}{footer}"
 
 
 CSV_FIELDS = ["mercado", "simbolo", "base", "quote", "fecha", "fecha_analisis", "open", "high", "low", "close",
-              "volumen", "pct_rango", "pct_cuerpo", "min_precio", "min_hora_utc", "max_precio", "max_hora_utc"]
-
-
-def utc_hour(ms: int) -> str:
-    return datetime.fromtimestamp(ms / 1000, timezone.utc).strftime("%H:%M")
+              "volumen", "pct_rango", "pct_cuerpo"]
 
 
 def export_csv(path: str, results: Sequence[ScanResult], order: str) -> None:
@@ -159,9 +154,7 @@ def export_csv(path: str, results: Sequence[ScanResult], order: str) -> None:
         writer = csv.DictWriter(fh, fieldnames=CSV_FIELDS, extrasaction="ignore")
         writer.writeheader()
         for r in results:
-            for e in sorted(r.explosions, key=SORT_KEYS[order]):
-                writer.writerow(dict(explosion_to_dict(e), min_hora_utc=utc_text(e.rise.low_time),
-                                     max_hora_utc=utc_text(e.rise.high_time)))
+            writer.writerows(explosion_to_dict(e) for e in sorted(r.explosions, key=SORT_KEYS[order]))
 
 
 def _progress_printer(label: str, unit: str = "pares descargados"):
