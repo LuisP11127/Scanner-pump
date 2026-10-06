@@ -31,6 +31,7 @@ def build_payload(results: Sequence[ScanResult], generated_at: datetime, order: 
             "nombre": r.market.label,
             "quote": config.quote,
             "analizadas": r.analyzed,
+            "descartadas_orden": r.max_before_min,  # su máximo fue antes del mínimo
             "coincidencias": coins,
         }
     return {

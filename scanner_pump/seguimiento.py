@@ -7,8 +7,12 @@ análisis (la vela anterior) y los datos de las dos velas::
      "fecha": "2026-10-01",            # vela de la explosión (como la muestra Binance en hora Lima)
      "fecha_analisis": "2026-09-30",   # la vela anterior, la del análisis
      "apertura_utc": "2026-10-02T00:00:00Z",
-     "monedas": [{"mercado": "spot", "simbolo": "XXXUSDT", "pct_rango": 23.4, ...}, ...]
+     "monedas": [{"mercado": "spot", "simbolo": "XXXUSDT", "pct_rango": 23.4, "min_hora": ..., ...}, ...]
     }
+
+``pct_rango`` es la subida del mínimo a un máximo posterior (con sus precios y horas en ``min_*`` / ``max_*``,
+calculados con velas de ``intradia``). Las monedas guardadas antes de este criterio no tienen ``intradia``:
+al unir un día, las de un mercado se sustituyen en cuanto llega un escaneo nuevo de ese mercado.
 
 Los escriben el workflow «Escaneo diario» y la web (si se conecta con GitHub). El workflow «Web» los
 une en ``seguimiento.json`` al publicar la página.
@@ -28,7 +32,8 @@ from .fechas import analysis_label, open_of
 DAY_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 COIN_FIELDS = (
     "mercado", "simbolo", "base", "quote", "fecha", "fecha_analisis", "apertura",
-    "open", "high", "low", "close", "volumen", "pct_rango", "pct_cuerpo", "analisis",
+    "open", "high", "low", "close", "volumen", "pct_rango", "pct_cuerpo",
+    "min_precio", "min_hora", "max_precio", "max_hora", "intradia", "analisis",
 )
 
 
@@ -50,13 +55,26 @@ def make_day(fecha: date, coins: Iterable[dict]) -> dict:
     }
 
 
+def is_legacy(coin: dict) -> bool:
+    """Guardada con el criterio antiguo (mínimo y máximo del día sin mirar cuál fue antes)."""
+    return not coin.get("intradia")
+
+
 def merge_days(old: Optional[dict], new: dict) -> dict:
-    """Une dos versiones del mismo día: cada moneda (mercado + símbolo) una vez, con los datos más nuevos."""
+    """Une dos versiones del mismo día: cada moneda (mercado + símbolo) una vez, con los datos más nuevos.
+
+    Las monedas del criterio antiguo de un mercado se descartan si ese mercado ya tiene datos nuevos.
+    """
+    valid = [
+        c for day in (old, new) for c in (day or {}).get("monedas") or []
+        if isinstance(c, dict) and c.get("mercado") and c.get("simbolo")
+    ]
+    fresh_markets = {c["mercado"] for c in valid if not is_legacy(c)}
     coins: dict[str, dict] = {}
-    for day in (old, new):
-        for c in (day or {}).get("monedas") or []:
-            if isinstance(c, dict) and c.get("mercado") and c.get("simbolo"):
-                coins[coin_key(c)] = clean_coin(c)
+    for c in valid:
+        if is_legacy(c) and c["mercado"] in fresh_markets:
+            continue
+        coins[coin_key(c)] = clean_coin(c)
     merged = dict(new)
     merged["monedas"] = sorted(coins.values(), key=lambda c: -(c.get("pct_rango") or 0))
     return merged

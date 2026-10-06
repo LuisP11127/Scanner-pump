@@ -179,6 +179,7 @@ body.tracking .scan-only { display: none !important; }
 .coins .coin { font: 600 15px var(--font-display); letter-spacing: 0.01em; }
 .coins .coin small { font-size: 0.78em; color: var(--muted); margin-right: 8px; }
 .coins .c-ana { color: var(--accent); font-weight: 500; }
+.coins .hours { margin-left: 8px; font-size: 11.5px; color: var(--muted); }
 .coins .d-short { display: none; }
 .coins .muted { color: var(--muted); }
 .chgbar { display: inline-block; position: relative; width: 52px; height: 6px; margin-left: 10px; vertical-align: middle; background: var(--grid); border-radius: 3px; overflow: hidden; }
@@ -242,7 +243,7 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
   <header class="top">
     <div class="brand">
       <h1>Scanner-pump</h1>
-      <p class="cond" id="cond">Velas 1D con subida <span class="hot">≥ 10 %</span> · Mín→Máx o Apertura→Cierre</p>
+      <p class="cond" id="cond">Velas 1D con subida <span class="hot">≥ 10 %</span> · Mín→Máx (el mínimo antes que el máximo) o Apertura→Cierre</p>
     </div>
     <nav class="seg views" id="views" aria-label="Secciones">
       <button type="button" data-view="scan" aria-pressed="true">Escáner</button>
@@ -425,6 +426,8 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
   const CHART_BEFORE = 250, CHART_LIMIT = 330;  // velas de cada gráfico: 250 antes de la explosión y el resto después
   const CHART_TTL = 5 * 60000;                  // cada cuánto se vuelven a pedir las velas de un gráfico
   const CRITS = { rango: "Mín→Máx", cuerpo: "Apertura→Cierre" };
+  // Velas con las que se ordena en el tiempo el mínimo y el máximo del día (el mínimo tiene que ir antes).
+  const INTRADAY = "5m", INTRADAY_MS = 300000;
   const state = { data: null, origin: null, items: [], view: [], market: "todos", crit: "rango", minPct: MIN_PCT, sort: "rango",
     q: "", size: "m", current: -1, tf: "1d", vtf: "1d", cut: false, trackSaved: null };
   const minis = new Map();  // elemento .mini -> entrada de gráfico
@@ -596,6 +599,7 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
     for (const [key, mk] of Object.entries(d.mercados)) {
       const n = (mk.coincidencias || []).length;
       add(MARKET_NAMES[key] || mk.nombre || key, mk.analizadas != null ? n + " de " + mk.analizadas : String(n));
+      if (mk.descartadas_orden) meta.lastChild.title = mk.descartadas_orden + " descartadas: su máximo fue antes del mínimo";
     }
     const pick = (fn) => (v) => { fn(v); renderHeader(); renderGrid(); };
     const keys = new Set(state.items.map((it) => it.mercado));
@@ -631,12 +635,26 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
     for (const [key, label] of [["rango", "Mín→Máx"], ["cuerpo", "Apert→Cierre"]]) {
       const v = pctOf(it, key);
       const ok = v != null && v >= MIN_PCT;
-      wrap.append(h("span", { class: "pct", title: key === "rango" ? "Del mínimo al máximo de la vela" : "De la apertura al cierre de la vela" },
+      const legacy = key === "rango" && isLegacy(it);
+      wrap.append(h("span", { class: "pct", title: key === "cuerpo" ? "De la apertura al cierre de la vela" : legacy ? LEGACY_TEXT
+          : "Del mínimo a un máximo posterior: el mínimo tiene que ir antes que el máximo" },
         h("small", { text: label }),
-        h("b", { class: key === "rango" ? "hot" : v >= 0 ? "up" : "down", text: fmtPct(v) }),
+        h("b", { class: key === "rango" ? "hot" : v >= 0 ? "up" : "down", text: fmtPct(v) + (legacy ? "*" : "") }),
         ok ? h("span", { class: "ok", text: "≥" + MIN_PCT + "%" }) : null));
     }
     return wrap;
+  }
+  const utcTime = (ms) => new Date(ms).toISOString().slice(11, 16);
+  const isLegacy = (it) => !it.intradia;  // guardada antes de comprobar que el mínimo va antes del máximo
+  const LEGACY_TEXT = "Medida antigua: mínimo y máximo del día sin comprobar cuál fue antes. Vuelve a escanear este día para actualizarla.";
+  // «Mín 1.8000 12:00 → Máx 2.0500 15:00 UTC»: de dónde a dónde subió dentro de la vela.
+  function riseRow(it) {
+    const row = h("div", { class: "ohlc", title: "Subida dentro de la vela del " + dayTitle(it.fecha) + ": del mínimo (vela de " + it.intradia +
+      " de las " + utcTime(it.min_hora) + " UTC) al máximo posterior (vela de las " + utcTime(it.max_hora) + " UTC). En " + ZONA.nombre + ": " +
+      fmtTime(it.min_hora) + " → " + fmtTime(it.max_hora) + "." });
+    row.append(h("span", null, "Mín ", h("b", { text: fmtPrice(it.min_precio) }), " " + utcTime(it.min_hora)),
+      h("span", null, "→ Máx ", h("b", { text: fmtPrice(it.max_precio) }), " " + utcTime(it.max_hora) + " UTC"));
+    return row;
   }
   function ohlc(it) {
     const row = h("div", { class: "ohlc", title: "Apertura, máximo, mínimo y cierre de la vela del " + dayTitle(it.fecha) });
@@ -664,7 +682,7 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
         h("span", { class: "badge", text: MARKET_NAMES[it.mercado] || it.mercado }),
         expand),
       pctBlock(it),
-      ohlc(it),
+      isLegacy(it) ? ohlc(it) : riseRow(it),
       maLegend(it, null, state.tf, false),
       mini,
       h("div", { class: "card-foot" },
@@ -749,7 +767,10 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
     const exp = first(it.apertura, it.apertura + DAY);
     const ana = first(it.apertura - DAY, it.apertura);
     const focus = exp >= 0 ? exp : rows.length - 1;
-    return (e.sd[k] = { candles, raw, mas, volume, exp, ana, focus });
+    // Velas que contienen el mínimo y el máximo de la subida (en 1D son la propia vela de la explosión).
+    const within = (ms) => (tf === "1d" || ms == null ? -1 : rows.findIndex((r) => r[0] <= ms && ms < r[0] + TF_MS[tf]));
+    const mn = within(it.min_hora), mx = within(it.max_hora);
+    return (e.sd[k] = { candles, raw, mas, volume, exp, ana, focus, mn, mx });
   }
   function chartOptions(t, isBig) {
     return {
@@ -768,7 +789,9 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
     const out = [];
     if (sd.ana >= 0) out.push({ time: sd.candles[sd.ana].time, position: "belowBar", color: t.accent, shape: "arrowUp", text: isBig ? "Análisis" : "" });
     if (sd.exp >= 0) out.push({ time: sd.candles[sd.exp].time, position: "aboveBar", color: t.hot, shape: "arrowDown", text: isBig ? "Explosión" : "" });
-    return out;
+    if (sd.mn >= 0) out.push({ time: sd.candles[sd.mn].time, position: "belowBar", color: t.down, shape: "circle", text: isBig ? "Mín" : "" });
+    if (sd.mx >= 0) out.push({ time: sd.candles[sd.mx].time, position: "aboveBar", color: t.up, shape: "circle", text: isBig ? "Máx" : "" });
+    return out.sort((a, b) => a.time - b.time);
   }
   function applyColors(entry, t) {
     entry.chart.applyOptions(chartOptions(t, entry.isBig));
@@ -850,10 +873,8 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
     if (c) {
       const row = h("span", null);
       for (const [k, v] of [["A", c.open], ["M", c.high], ["m", c.low], ["C", c.close]]) row.append(h("b", { text: k + " " }), fmtPrice(v), "  ");
-      const pr = c.low > 0 ? (c.high - c.low) / c.low * 100 : null;
       const pc = c.open > 0 ? (c.close - c.open) / c.open * 100 : null;
-      row.append(h("b", { text: "Mín→Máx " }), h("span", { class: "hot", text: fmtPct(pr) }), "  ",
-        h("b", { text: "Apert→Cierre " }), h("span", { class: pc >= 0 ? "up" : "down", text: fmtPct(pc) }), "  ");
+      row.append(h("b", { text: "Apert→Cierre " }), h("span", { class: pc >= 0 ? "up" : "down", text: fmtPct(pc) }), "  ");
       $("v-legend").prepend(row);
     }
   }
@@ -888,6 +909,9 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
     stats.append(
       h("span", { class: "tf-tag hot", text: "Vela " + shortDate(it.fecha), title: "Vela de la explosión: abre el " + fmtDateTime(it.apertura) + " (" + ZONA.nombre + ")" }),
       h("span", { class: "tf-tag ana", text: "Análisis " + shortDate(it.fecha_analisis), title: "Fecha de análisis: la vela anterior a la explosión" }),
+      isLegacy(it) ? h("span", { class: "down", text: "* medida antigua", title: LEGACY_TEXT })
+        : h("span", { title: "En " + ZONA.nombre + ": " + fmtTime(it.min_hora) + " → " + fmtTime(it.max_hora) },
+          "Mín ", h("b", { text: utcTime(it.min_hora) }), " → Máx ", h("b", { text: utcTime(it.max_hora) }), " UTC"),
       ana == null ? null : h("span", null, "Día análisis ", h("b", { class: ana >= 0 ? "up" : "down", text: fmtPct(ana) })),
       h("span", null, "Vol vela ", h("b", { text: fmtVol(it.volumen) })),
       now == null ? null : h("span", null, "Ahora ", h("b", { text: fmtPrice(now) }), " ", h("b", { class: since >= 0 ? "up" : "down", text: fmtPct(since) })),
@@ -1144,13 +1168,30 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
     } catch (err) { /* sin copia local */ }
     return null;
   }
+  // Medidas de una vela diaria. «extremos» es del mínimo al máximo sin mirar el orden: el límite de lo que pudo subir.
   function measure(k) {
     const open = +k[1], high = +k[2], low = +k[3], close = +k[4];
     return {
       open, high, low, close, volumen: round(k.length > 7 ? +k[7] : +k[5] * close, 2),
-      pct_rango: low > 0 ? round((high - low) / low * 100, 4) : null,
+      extremos: low > 0 ? (high - low) / low * 100 : null,
       pct_cuerpo: open > 0 ? round((close - open) / open * 100, 4) : null,
     };
+  }
+  // Mayor subida de un mínimo a un máximo posterior, con velas cortas en orden. Dentro de cada vela se supone
+  // el recorrido habitual: alcista, apertura → mínimo → máximo → cierre; bajista, apertura → máximo → mínimo → cierre.
+  // Si el máximo del día fue antes que el mínimo, esa caída no cuenta como subida.
+  function runUp(rows) {
+    let best = null, low = null, lowTime = null;
+    for (const k of [...rows].sort((a, b) => Number(a[0]) - Number(b[0]))) {
+      const t = Number(k[0]), o = +k[1], hi = +k[2], lo = +k[3], c = +k[4];
+      for (const price of (c >= o ? [o, lo, hi, c] : [o, hi, lo, c])) {
+        if (!(price > 0)) continue;
+        if (low == null || price < low) { low = price; lowTime = t; }
+        const pct = (price - low) / low * 100;
+        if (!best || pct > best.pct) best = { pct, low, lowTime, high: price, highTime: t };
+      }
+    }
+    return best;
   }
   async function scanMarket(key, opts, report, signal) {
     const cfg = API[key];
@@ -1169,21 +1210,20 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
       else notes.push("no se pudo saber qué pares son acciones tokenizadas (bStocks), así que pueden aparecer");
     }
     const open = opts.open;
-    const matches = [];
-    let analyzed = 0, done = 0, failed = 0;
+    const candidates = [], matches = [];
+    let analyzed = 0, done = 0, failed = 0, maxFirst = 0;
+    // 1) Dos velas diarias por par: la del día de análisis y la de la explosión.
     await runPool(symbols, 8, async (s) => {
       try {
-        // Dos velas diarias: la del día de análisis y la de la explosión.
         const rows = await api.get(cfg.klines, { symbol: s.symbol, interval: "1d", startTime: String(open - DAY), limit: "2" }, cfg.klinesW(2), isList);
         const day = rows.find((k) => Number(k[0]) === open);
         if (!day) return;  // el par no tenía vela ese día
         analyzed++;
         const c = measure(day);
-        if (!((c.pct_rango ?? -1) >= MIN_PCT || (c.pct_cuerpo ?? -1) >= MIN_PCT)) return;
+        if (!(c.extremos >= MIN_PCT)) return;  // ni sin mirar el orden llega
         if (opts.minVolume > 0 && c.volumen < opts.minVolume) return;
         const prev = rows.find((k) => Number(k[0]) === open - DAY);
-        matches.push(Object.assign({ mercado: key, simbolo: s.symbol, base: s.baseAsset, quote: s.quoteAsset,
-          fecha: labelOf(open), fecha_analisis: labelOf(open - DAY), apertura: open }, c, { analisis: prev ? measure(prev) : null }));
+        candidates.push({ s, c, prev: prev ? measure(prev) : null });
       } catch (err) {
         if (err.fatal) throw err;
         failed++;
@@ -1191,9 +1231,30 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
         report(cfg.nombre + ": " + (++done) + "/" + symbols.length + " pares");
       }
     });
+    // 2) Velas de 5 minutos de ese día de las candidatas: ¿el mínimo fue antes que el máximo?
+    done = 0;
+    await runPool(candidates, 8, async ({ s, c, prev }) => {
+      try {
+        const params = { symbol: s.symbol, interval: INTRADAY, startTime: String(open), endTime: String(open + DAY - 1), limit: String(DAY / INTRADAY_MS) };
+        const rows = (await api.get(cfg.klines, params, cfg.klinesW(DAY / INTRADAY_MS), isList)).filter((k) => Number(k[0]) >= open && Number(k[0]) < open + DAY);
+        const rise = runUp(rows);
+        if (!rise) { failed++; return; }
+        if (!(rise.pct >= MIN_PCT || (c.pct_cuerpo ?? -1) >= MIN_PCT)) { maxFirst++; return; }
+        const analisis = prev ? { open: prev.open, high: prev.high, low: prev.low, close: prev.close, volumen: prev.volumen, pct_cuerpo: prev.pct_cuerpo } : null;
+        matches.push({ mercado: key, simbolo: s.symbol, base: s.baseAsset, quote: s.quoteAsset, fecha: labelOf(open), fecha_analisis: labelOf(open - DAY),
+          apertura: open, open: c.open, high: c.high, low: c.low, close: c.close, volumen: c.volumen,
+          pct_rango: round(rise.pct, 4), pct_cuerpo: c.pct_cuerpo, min_precio: rise.low, min_hora: rise.lowTime,
+          max_precio: rise.high, max_hora: rise.highTime, intradia: INTRADAY, analisis });
+      } catch (err) {
+        if (err.fatal) throw err;
+        failed++;
+      } finally {
+        report(cfg.nombre + ": comprobando el orden mínimo→máximo " + (++done) + "/" + candidates.length);
+      }
+    });
     if (failed) notes.push(failed + " pares no respondieron");
     matches.sort(SORTS.rango);
-    return { market: { nombre: cfg.nombre, quote: "USDT", analizadas: analyzed, coincidencias: matches }, notes };
+    return { market: { nombre: cfg.nombre, quote: "USDT", analizadas: analyzed, descartadas_orden: maxFirst, coincidencias: matches }, notes };
   }
   // Fecha por defecto: la última vela diaria completa (la anterior a la que se está construyendo).
   function refreshDateInput(force) {
@@ -1281,7 +1342,7 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
     moneda: (a, b) => a.simbolo.localeCompare(b.simbolo),
   };
   const COIN_FIELDS = ["mercado", "simbolo", "base", "quote", "fecha", "fecha_analisis", "apertura", "open", "high", "low", "close",
-    "volumen", "pct_rango", "pct_cuerpo", "analisis"];
+    "volumen", "pct_rango", "pct_cuerpo", "min_precio", "min_hora", "max_precio", "max_hora", "intradia", "analisis"];
   const track = { remote: {}, prices: {}, market: "todos", crit: "rango", minPct: MIN_PCT, sort: "rango", timer: null, sync: "", syncError: "", busy: false };
   const GH_API = "https://api.github.com";
   const GH_DIR = "datos/seguimiento";
@@ -1298,11 +1359,12 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
     return { fecha, fecha_analisis: labelOf(openOf(fecha) - DAY), apertura_utc: new Date(openOf(fecha)).toISOString().replace(".000Z", "Z") };
   }
   // Une dos versiones del mismo día: cada moneda (mercado + símbolo) una vez, con los datos más nuevos.
+  // Las monedas del criterio antiguo de un mercado se descartan si ese mercado ya tiene datos nuevos.
   function mergeDay(a, b) {
+    const valid = [...((a && a.monedas) || []), ...((b && b.monedas) || [])].filter((c) => c && c.simbolo && c.mercado);
+    const fresh = new Set(valid.filter((c) => !isLegacy(c)).map((c) => c.mercado));
     const coins = new Map();
-    for (const c of [...((a && a.monedas) || []), ...((b && b.monedas) || [])]) {
-      if (c && c.simbolo && c.mercado) coins.set(coinKey(c), c);
-    }
+    for (const c of valid) if (!isLegacy(c) || !fresh.has(c.mercado)) coins.set(coinKey(c), c);
     const fecha = (b || a).fecha;
     return Object.assign(dayHeader(fecha), { monedas: [...coins.values()].sort(SORTS.rango) });
   }
@@ -1554,7 +1616,7 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
       h("th", { text: "Moneda" }),
       h("th", { text: "Fecha de explosión" }),
       h("th", { class: "ana", text: "Fecha de análisis" }),
-      h("th", { class: "r", text: "Mín→Máx" }),
+      h("th", { class: "r", text: "Mín→Máx (hora UTC)", title: "Subida del mínimo a un máximo posterior, y a qué hora (UTC) fueron" }),
       h("th", { class: "r", text: "Apert→Cierre" }),
       h("th", { class: "r", text: "Cierre", title: "Precio de cierre de la vela de la explosión" }),
       h("th", { class: "r", text: "Precio actual" }),
@@ -1566,7 +1628,10 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
           h("span", { class: "badge", text: MARKET_NAMES[c.mercado] || c.mercado })),
         h("td", { class: "c-exp", "data-label": "Explosión" }, dateCell(c.fecha)),
         h("td", { class: "c-ana", "data-label": "Análisis" }, dateCell(c.fecha_analisis)),
-        h("td", { class: "r num c-rango hot", "data-label": "Mín→Máx", text: fmtPct(c.pct_rango) }),
+        h("td", { class: "r num c-rango hot", "data-label": "Mín→Máx", title: isLegacy(c) ? LEGACY_TEXT
+            : "Mín " + fmtPrice(c.min_precio) + " (" + utcTime(c.min_hora) + " UTC) → Máx " + fmtPrice(c.max_precio) + " (" + utcTime(c.max_hora) + " UTC)" },
+          fmtPct(c.pct_rango) + (isLegacy(c) ? "*" : ""),
+          isLegacy(c) ? null : h("small", { class: "hours", text: utcTime(c.min_hora) + "→" + utcTime(c.max_hora) })),
         h("td", { class: "r num c-cuerpo " + (c.pct_cuerpo >= 0 ? "up" : "down"), "data-label": "Apert→Cierre", text: fmtPct(c.pct_cuerpo) }),
         h("td", { class: "r num c-close", "data-label": "Cierre", text: fmtPrice(c.close) }),
         h("td", { class: "r num c-now", "data-label": "Ahora", text: c.ahora == null ? "—" : fmtPrice(c.ahora) }),
@@ -1594,6 +1659,12 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
       s.n ? h("span", null, h("b", { class: "up", text: "▲ " + s.up }), " suben · ", h("b", { class: "down", text: "▼ " + s.down }), " bajan") : null,
       s.n > 1 ? h("span", null, "Mejor ", h("b", { text: (s.best.base || s.best.simbolo) + " " + fmtPct(s.best.desde) })) : null,
       h("span", { text: daysAgo(day.fecha) }));
+    const legacy = day.monedas.filter(isLegacy).length;
+    if (legacy) {
+      const again = h("button", { class: "btn small", type: "button", text: "Volver a escanear" });
+      again.addEventListener("click", () => rescanDay(day.fecha));
+      stats.append(h("span", { class: "down", title: LEGACY_TEXT }, legacy + " con la medida antigua de Mín→Máx (sin comprobar el orden) "), again);
+    }
     const cardEl = h("article", { class: "day" },
       h("header", { class: "day-head" }, toggle, stats, h("div", { class: "day-actions" }, deleteControl(day.fecha))));
     if (open) cardEl.append(coins.length ? coinTable(day, coins) : h("p", { class: "gh-note", style: "padding: 0 14px 12px", text: "Ninguna moneda con este filtro." }));
@@ -1648,6 +1719,16 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
       return;
     }
     days.forEach((day, i) => list.append(dayCard(day, i)));
+  }
+  // Escanea otra vez un día (spot y futuros) y lo guarda en el seguimiento: sustituye las monedas del criterio antiguo.
+  function rescanDay(fecha) {
+    if (scanController) return;
+    location.hash = "";
+    showView("scan");
+    $("scan-market").value = "ambos";
+    $("scan-date").value = fecha;
+    $("scan-track").checked = true;
+    $("scan-form").requestSubmit();
   }
   // Abre una moneda del seguimiento en el visor de gráficos, con la explosión y el análisis marcados.
   function openTrackedChart(coins, index) {
@@ -1717,7 +1798,7 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
     const day = allDays()[0];
     if (!day) {
       renderNotice("Listo para escanear. ", "Pulsa «Escanear» para buscar en Binance las monedas cuya última vela diaria completa subió un " + MIN_PCT +
-        " % o más (de mínimo a máximo o de apertura a cierre). También puedes elegir otra fecha o abrir un informe con «Cargar informe».");
+        " % o más (de un mínimo a un máximo posterior, o de apertura a cierre). También puedes elegir otra fecha o abrir un informe con «Cargar informe».");
       return;
     }
     const mercados = {};

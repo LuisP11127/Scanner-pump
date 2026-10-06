@@ -5,12 +5,20 @@ Capta las velas diarias de Binance (**spot** y **futuros USDⓈ-M perpetuos**, p
 
 | Medida | Cálculo | Ejemplo |
 |---|---|---|
-| **Mín→Máx** | `(máximo − mínimo) / mínimo` | mínimo 1.00, máximo 1.25 → **+25 %** |
+| **Mín→Máx** | `(máximo − mínimo) / mínimo`, con el **mínimo antes que el máximo** | mínimo 1.80 a las 12:00 UTC, máximo 2.05 a las 15:00 → **+13.9 %** |
 | **Apertura→Cierre** | `(cierre − apertura) / apertura` | apertura 1.00, cierre 1.12 → **+12 %** |
 
-Toda vela con Apertura→Cierre ≥ 10 % tiene también Mín→Máx ≥ 10 % (el mínimo nunca está por encima de la
-apertura ni el máximo por debajo del cierre), así que la lista son las velas con Mín→Máx ≥ 10 % y de cada una
-se indica si además cumple Apertura→Cierre (etiqueta **≥10%**).
+**Mín→Máx tiene que ser una subida de verdad.** Si el máximo del día fue a las 09:00 UTC y el mínimo a las
+12:00, eso fue una caída y no cuenta: se mide la mayor subida desde un mínimo hasta un máximo **posterior**
+(por ejemplo, del mínimo de las 12:00 al máximo de las 15:00). La vela diaria de Binance no dice a qué hora
+fueron su mínimo y su máximo, así que el orden se saca de las **velas de 5 minutos** de ese día; solo se
+descargan para las monedas cuyo rango del día (sin mirar el orden) llega al 10 %. Dentro de cada vela de
+5 minutos se supone el recorrido habitual (alcista: apertura → mínimo → máximo → cierre; bajista: apertura →
+máximo → mínimo → cierre).
+
+Toda vela con Apertura→Cierre ≥ 10 % tiene también Mín→Máx ≥ 10 % (la apertura es un mínimo anterior al
+cierre), así que la lista son las velas con Mín→Máx ≥ 10 % y de cada una se indica si además cumple
+Apertura→Cierre (etiqueta **≥10%**). Cada moneda muestra el precio y la hora (UTC) de su mínimo y de su máximo.
 
 Datos (API pública, sin claves):
 
@@ -42,8 +50,9 @@ Binance salen desde tu navegador, así que no hace falta ningún servidor.
 - Filtros: **Todos / Spot / Futuros / No repetidas** (cada moneda una vez; si está en los dos mercados, la de
   spot), **Medida** (Mín→Máx o Apertura→Cierre), **Subida mín.** (≥ 10, 15, 20, 25, 30, 40, 50, 75 o 100 %),
   orden por mayor subida, volumen o símbolo, y búsqueda.
-- Cada tarjeta trae su gráfico con **MA(7)**, **MA(25)** y **MA(99)** (colores de Binance), la vela de la
-  explosión marcada en naranja y la de análisis en azul. **Gráfico 2H · 4H · 8H · 12H · 1D** cambia la
+- Cada tarjeta trae la subida (**Mín 1.8000 12:00 → Máx 2.0500 15:00 UTC**) y su gráfico con **MA(7)**,
+  **MA(25)** y **MA(99)** (colores de Binance), la vela de la explosión marcada en naranja, la de análisis en
+  azul y, en 2H a 12H, las velas del mínimo («Mín») y del máximo («Máx»). **Gráfico 2H · 4H · 8H · 12H · 1D** cambia la
   temporalidad y **Tamaño S / M / L** agranda o achica las tarjetas.
 - Al pulsar una tarjeta se abre el gráfico a pantalla completa:
   - **Siguiente** (o `→`) pasa a la siguiente criptomoneda, `←` a la anterior y `Esc` cierra;
@@ -51,14 +60,15 @@ Binance salen desde tu navegador, así que no hace falta ningún servidor.
     vuelve a la explosión;
   - **Hasta el análisis** (o `H`) oculta las velas posteriores: el gráfico tal como estaba al cerrar la fecha de
     análisis, para estudiarlo sin ver lo que pasó después;
-  - al pasar el ratón se ven apertura, máximo, mínimo, cierre, las dos subidas y las tres medias de esa vela.
+  - al pasar el ratón se ven apertura, máximo, mínimo, cierre, Apertura→Cierre y las tres medias de esa vela.
 - **Cargar informe** abre un `.html` o `.json` generado por la línea de comandos o por el workflow.
 
 ### Seguimiento
 
 Un apartado por día con explosiones (**Vela del 1 de octubre**, **Vela del 30 de septiembre**…), con las
-columnas **Fecha de explosión** y **Fecha de análisis** (la vela anterior), las dos subidas, el cierre de la
-vela, el precio actual y la variación desde el cierre (se actualiza cada minuto). Tiene los mismos filtros que
+columnas **Fecha de explosión** y **Fecha de análisis** (la vela anterior), las dos subidas (Mín→Máx con la
+hora UTC del mínimo y del máximo), el cierre de la vela, el precio actual y la variación desde el cierre (se
+actualiza cada minuto). Tiene los mismos filtros que
 el escáner y al pulsar una moneda se abre su gráfico con las dos velas marcadas.
 
 Los días llegan de dos sitios:
@@ -73,6 +83,10 @@ Los días llegan de dos sitios:
 Cada día es un archivo `datos/seguimiento/AAAA-MM-DD.json`; si el workflow y la web guardan el mismo día, se
 unen (cada moneda una vez por mercado). **Borrar** quita un día.
 
+Los días guardados antes de comprobar el orden mínimo→máximo muestran sus Mín→Máx con un asterisco y el aviso
+«medida antigua». **Volver a escanear** (o **Actions → Escaneo diario → Run workflow** con esa fecha) los
+actualiza: al llegar los datos nuevos de un mercado, se quitan las monedas antiguas de ese mercado.
+
 ## GitHub Actions
 
 | Workflow | Cuándo | Qué hace |
@@ -82,8 +96,8 @@ unen (cada moneda una vez por mercado). **Borrar** quita un día.
 | **Tests** (`tests.yml`) | En cada pull request y cambio en `main`. | Pasa los tests y comprueba la huella de la librería de gráficos. |
 
 **Escaneo manual:** **Actions → Escaneo diario → Run workflow**. Puedes dejar la fecha vacía (última vela
-completa) o escribir otra (`AAAA-MM-DD`, fecha de la vela en hora Lima) para rellenar días pasados, elegir el
-mercado y si se guarda en el seguimiento.
+completa) o escribir una o varias fechas separadas por espacios (`2026-10-01 2026-10-02`, fecha de la vela en
+hora Lima) para rellenar o volver a escanear días pasados, elegir el mercado y si se guarda en el seguimiento.
 
 ### Puesta en marcha
 
@@ -118,7 +132,9 @@ python -m scanner_pump --seguimiento datos/seguimiento   # guarda el día en el 
 python -m scanner_pump --csv velas.csv --json velas.json
 ```
 
-Al terminar abre en el navegador el informe con los gráficos (`reportes/scanner-pump_<fecha>.html`).
+Al terminar abre en el navegador el informe con los gráficos (`reportes/scanner-pump_<fecha>.html`). La tabla
+indica la hora UTC del mínimo y del máximo de cada subida y cuántas monedas se descartaron porque su máximo
+fue antes del mínimo.
 
 | Opción | Por defecto | Descripción |
 |---|---|---|
