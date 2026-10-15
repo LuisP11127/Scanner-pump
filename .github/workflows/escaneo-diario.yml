@@ -75,10 +75,17 @@ jobs:
           pathlib.Path("reportes/salida.txt").write_text("\n\n".join(salidas) + "\n", encoding="utf-8")
           sys.exit(code)
 
+      # Fecha de listado de cada par para la pestaña «Monedas listadas 2026». No cambia, así que solo se
+      # piden a Binance los pares nuevos (el resto ya está en datos/listados.json).
+      - name: Actualizar las monedas listadas
+        if: always() && env.GUARDAR == 'true'
+        continue-on-error: true
+        run: python -m scanner_pump.listados datos/listados.json --salida reportes/listados.json
+
       # Se une con lo último del repositorio (la web también guarda ahí sus escaneos) y se reintenta si
       # alguien guardó a la vez.
       - name: Guardar en el seguimiento
-        if: always() && env.GUARDAR == 'true' && hashFiles('reportes/seguimiento/*.json') != ''
+        if: always() && env.GUARDAR == 'true' && hashFiles('reportes/seguimiento/*.json', 'reportes/listados.json') != ''
         env:
           BRANCH: ${{ github.ref_name }}
         run: |
@@ -88,15 +95,23 @@ jobs:
             git fetch --quiet origin "$BRANCH"
             git reset --quiet --hard "origin/$BRANCH"
             python -m scanner_pump.seguimiento reportes/seguimiento datos/seguimiento
-            git add datos/seguimiento
+            # Solo este workflow escribe datos/listados.json, así que la versión nueva sustituye a la anterior.
+            if [ -f reportes/listados.json ]; then cp reportes/listados.json datos/listados.json; fi
+            git add -A datos
             if git diff --cached --quiet; then
               echo "El seguimiento ya estaba al día."
               exit 0
             fi
-            dias=$(git diff --cached --name-only | xargs -n1 basename | sed 's/\.json$//' | paste -sd ' ' -)
-            git commit --quiet -m "Seguimiento: velas del $dias (escaneo automático)"
+            dias=$(git diff --cached --name-only -- datos/seguimiento | xargs -r -n1 basename | sed 's/\.json$//' | paste -sd ' ' -)
+            msg="Seguimiento:"
+            if [ -n "$dias" ]; then msg="$msg velas del $dias"; fi
+            if ! git diff --cached --quiet -- datos/listados.json; then
+              if [ -n "$dias" ]; then msg="$msg;"; fi
+              msg="$msg monedas listadas"
+            fi
+            git commit --quiet -m "$msg (escaneo automático)"
             if git push --quiet origin "HEAD:$BRANCH"; then
-              echo "Seguimiento guardado: $dias"
+              echo "Guardado: $msg"
               exit 0
             fi
             sleep $((intento * 5))

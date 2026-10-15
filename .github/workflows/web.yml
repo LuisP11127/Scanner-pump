@@ -1,7 +1,8 @@
 name: Web
 
-# Publica la web (GitHub Pages) con el seguimiento al día: une datos/seguimiento/*.json en seguimiento.json
-# y añade la lista de acciones tokenizadas de Binance (bstocks.json) para descartarlas del escáner.
+# Publica la web (GitHub Pages) con el seguimiento al día: une datos/seguimiento/*.json en seguimiento.json,
+# publica las fechas de listado (datos/listados.json → listados.json) y añade la lista de acciones
+# tokenizadas de Binance (bstocks.json) para descartarlas del escáner.
 # Se ejecuta en cada cambio en main (incluidos los guardados que hace la web con la clave de GitHub) y
 # después de cada «Escaneo diario». Solo despliega si GitHub Pages está activado con «Source: GitHub Actions».
 on:
@@ -55,7 +56,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -r requirements.txt
-      - run: python -m scanner_pump.web site --bstocks --seguimiento datos/seguimiento
+      - run: python -m scanner_pump.web site --bstocks --seguimiento datos/seguimiento --listados datos/listados.json
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
