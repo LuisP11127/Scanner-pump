@@ -65,7 +65,7 @@
    "high": 0.06774,
    "low": 0.0383,
    "close": 0.05785,
-   "volumen": 607305047.0,
+   "volumen": 607305047,
    "pct_rango": 76.8668,
    "pct_cuerpo": 50.7688,
    "analisis": {
@@ -266,7 +266,7 @@
    "low": 0.0375,
    "close": 0.0497,
    "volumen": 2570574.04,
-   "pct_rango": 44.0,
+   "pct_rango": 44,
    "pct_cuerpo": 18.8995,
    "analisis": {
     "open": 0.0516,
@@ -373,7 +373,7 @@
     "high": 2.18,
     "low": 1.7215,
     "close": 2.0852,
-    "volumen": 224792697.0,
+    "volumen": 224792697,
     "pct_rango": 26.6337,
     "pct_cuerpo": 19.4957
    }
@@ -1198,7 +1198,7 @@
     "high": 0.0144,
     "low": 0.01346,
     "close": 0.01402,
-    "volumen": 581280.0,
+    "volumen": 581280,
     "pct_rango": 6.9837,
     "pct_cuerpo": -1.198
    }
@@ -1840,7 +1840,7 @@
    "high": 0.05897,
    "low": 0.0507,
    "close": 0.05102,
-   "volumen": 4640603.0,
+   "volumen": 4640603,
    "pct_rango": 16.3116,
    "pct_cuerpo": -10.9754,
    "analisis": {
@@ -2450,7 +2450,7 @@
     "close": 0.0202,
     "volumen": 616850.93,
     "pct_rango": 9.5238,
-    "pct_cuerpo": 1.0
+    "pct_cuerpo": 1
    }
   },
   {
@@ -2595,7 +2595,7 @@
    "pct_cuerpo": -5.8193,
    "analisis": {
     "open": 1166.57,
-    "high": 1233.0,
+    "high": 1233,
     "low": 1122.38,
     "close": 1217.85,
     "volumen": 1764290351.2,
@@ -2638,7 +2638,7 @@
    "apertura": 1791936000000,
    "open": 1218.7,
    "high": 1286.54,
-   "low": 1125.0,
+   "low": 1125,
    "close": 1147.52,
    "volumen": 239579101.25,
    "pct_rango": 14.3591,
@@ -4165,7 +4165,7 @@
    "high": 0.4402,
    "low": 0.3935,
    "close": 0.4018,
-   "volumen": 25989214.77,
+   "volumen": 25989214.78,
    "pct_rango": 11.8679,
    "pct_cuerpo": -7.2484,
    "analisis": {
@@ -4465,7 +4465,7 @@
    "high": 8.394,
    "low": 7.534,
    "close": 7.665,
-   "volumen": 14246466.0,
+   "volumen": 14246466,
    "pct_rango": 11.4149,
    "pct_cuerpo": -5.4871,
    "analisis": {
