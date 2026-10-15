@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Scanner-pump</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🚀%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Semi+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
@@ -64,6 +65,7 @@ button, input, select { font: inherit; color: inherit; }
 .top { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 32px; }
 .brand { display: grid; gap: 2px; }
 .brand h1 { margin: 0; font: 700 30px/1.05 var(--font-display); letter-spacing: 0.01em; text-wrap: balance; }
+.brand h1 .logo { margin-right: 10px; font-size: 0.9em; }
 .cond { margin: 0; font: 500 13.5px/1.3 var(--font-mono); color: var(--muted); }
 .meta { display: flex; flex-wrap: wrap; gap: 8px 24px; margin: 0; }
 .meta div { display: grid; gap: 1px; }
@@ -132,7 +134,10 @@ input[type="search"] { width: 13rem; max-width: 100%; }
 .card-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; font-size: 13px; color: var(--muted); }
 .card-foot b { font: 500 13px var(--font-mono); color: var(--fg); font-variant-numeric: tabular-nums; }
 
-body.tracking .scan-only { display: none !important; }
+body.tracking .scan-only, body.listing .scan-only { display: none !important; }
+.badge.off { color: var(--down); border-color: currentColor; margin-left: 4px; }
+.coins .c-expl { color: var(--muted); }
+.coins .c-expl b { color: var(--fg); font-family: var(--font-mono); font-weight: 500; }
 .seg.views { align-self: center; }
 .seg.views button { font-size: 15px; padding: 6px 14px; }
 .scan .check { gap: 6px; color: var(--fg); cursor: pointer; }
@@ -209,6 +214,11 @@ body.tracking .scan-only { display: none !important; }
   .coins .c-high { grid-area: high; }
   .coins .c-low, .coins .c-high { white-space: normal; overflow: visible; }
   .coins td[data-label]::before { content: attr(data-label) " "; color: var(--muted); font-family: var(--font-body); font-weight: 400; }
+  .coins td:first-child, .coins td:last-child { padding: 0; }  /* sin el margen de escritorio */
+  .coins.list tbody tr { grid-template-areas: "coin since" "date expl" "first now"; }
+  .coins .c-date { grid-area: date; }
+  .coins .c-expl { grid-area: expl; text-align: right; white-space: normal; overflow: visible; }
+  .coins .c-first { grid-area: first; text-align: left; }
 }
 .empty { padding: 28px 16px; text-align: center; color: var(--muted); border: 1px dashed var(--line); border-radius: 8px; }
 .foot { font-size: 12.5px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 18px; }
@@ -229,6 +239,7 @@ body.tracking .scan-only { display: none !important; }
 .viewer .ma-legend { font-size: 12.5px; gap: 2px 16px; }
 .big { flex: 1 1 auto; min-height: 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--panel); position: relative; }
 .hint { margin: 0; font-size: 12.5px; color: var(--muted); }
+.hist { margin: -4px 0 0; font: 400 11.5px/1.3 var(--font-mono); color: var(--muted); min-height: 1.3em; }
 body.viewing { overflow: hidden; }
 body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
 
@@ -248,11 +259,12 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
 <div class="wrap">
   <header class="top">
     <div class="brand">
-      <h1>Scanner-pump</h1>
+      <h1><span class="logo" aria-hidden="true">🚀</span>Scanner-pump</h1>
       <p class="cond" id="cond">Velas 1D con subida <span class="hot">≥ 10 %</span> · Mín→Máx o Apertura→Cierre</p>
     </div>
     <nav class="seg views" id="views" aria-label="Secciones">
       <button type="button" data-view="scan" aria-pressed="true">Escáner</button>
+      <button type="button" data-view="list" aria-pressed="false">Monedas listadas 2026</button>
       <button type="button" data-view="track" aria-pressed="false">Seguimiento</button>
     </nav>
     <dl class="meta scan-only" id="meta"></dl>
@@ -316,6 +328,31 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
 
   <main class="grid scan-only size-m" id="grid" aria-live="polite"></main>
   <p class="empty scan-only" id="empty" hidden></p>
+
+  <section class="track" id="view-list" aria-label="Monedas listadas 2026" hidden>
+    <div class="track-bar">
+      <div class="seg" id="list-market" role="group" aria-label="Mercado"></div>
+      <label>Meses
+        <select id="list-order">
+          <option value="reciente">El más reciente primero</option>
+          <option value="enero">De enero en adelante</option>
+        </select>
+      </label>
+      <label>Dentro del mes
+        <select id="list-sort">
+          <option value="fecha">Por fecha de listado</option>
+          <option value="desde">Mayor subida desde el listado</option>
+          <option value="moneda">Moneda</option>
+        </select>
+      </label>
+      <input id="list-search" type="search" placeholder="Buscar moneda" aria-label="Buscar moneda" autocomplete="off">
+      <button class="btn" id="list-refresh" type="button">Actualizar</button>
+      <span class="scan-status" id="list-status" aria-live="polite"></span>
+    </div>
+    <p class="gh-note" id="list-note"></p>
+    <p class="notice" id="list-notice" hidden></p>
+    <div class="days" id="list-months"></div>
+  </section>
 
   <section class="track" id="view-track" aria-label="Seguimiento" hidden>
     <div class="track-bar">
@@ -408,8 +445,9 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
     </div>
   </div>
   <div class="ma-legend" id="v-legend"></div>
+  <p class="hist" id="v-hist" aria-live="polite"></p>
   <div class="big" id="big"></div>
-  <p class="hint">Rueda del ratón o pellizco para acercar y alejar · arrastra para moverte en el tiempo · ← → cambia de moneda · H muestra solo hasta la fecha de análisis · E vuelve a la explosión · Esc cierra · horas en hora Lima (UTC-5)</p>
+  <p class="hint">Rueda del ratón o pellizco para acercar y alejar · arrastra para moverte en el tiempo · ← → cambia de moneda · H muestra solo hasta la fecha de análisis · E vuelve a la explosión · 0 muestra todo el historial · Esc cierra · horas en hora Lima (UTC-5)</p>
 </div>
 
 <script id="scanner-data" type="application/json">__SCANNER_DATA__</script>
@@ -430,8 +468,9 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
   const MEDIAS = [7, 25, 99];
   const CHART_TFS = ["2h", "4h", "8h", "12h", "1d"];
   const TF_MS = { "2h": 7200000, "4h": 14400000, "8h": 28800000, "12h": 43200000, "1d": DAY };
-  const CHART_BEFORE = 250, CHART_LIMIT = 330;  // velas de cada gráfico: 250 antes de la explosión y el resto después
-  const CHART_TTL = 5 * 60000;                  // cada cuánto se vuelven a pedir las velas de un gráfico
+  const PAGE = 1000;           // velas por petición: el máximo de spot (en futuros, 1000 pesan la mitad que 1500)
+  const MAX_ROWS = 60000;      // tope de velas por gráfico (2H de casi 14 años)
+  const CHART_TTL = 5 * 60000; // cada cuánto se vuelven a pedir las velas más recientes de un gráfico
   const CRITS = { rango: "Mín→Máx", cuerpo: "Apertura→Cierre" };
   const state = { data: null, origin: null, items: [], view: [], market: "todos", crit: "rango", minPct: MIN_PCT, sort: "rango",
     q: "", size: "m", current: -1, tf: "1d", vtf: "1d", cut: false, trackSaved: null };
@@ -728,22 +767,38 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
   }
 
   // ---------- gráficos ----------
-  // Las velas de cada gráfico se guardan por moneda, día de la explosión y temporalidad.
-  const charts = new Map();  // "mercado:símbolo:apertura:tf" -> { rows, at, sd }
-  const chartKey = (it, tf) => it.mercado + ":" + it.simbolo + ":" + it.apertura + ":" + tf;
+  // Las velas se guardan por moneda y temporalidad, con todo lo descargado: la última página (las más recientes)
+  // y, al abrir el visor, el resto del historial hacia atrás hasta el listado de la moneda.
+  const charts = new Map();  // "mercado:símbolo:tf" -> { rows, at, live, complete, sd }
+  const chartKey = (it, tf) => it.mercado + ":" + it.simbolo + ":" + tf;
   function chartEntry(it, tf) {
     const key = chartKey(it, tf);
     let e = charts.get(key);
     if (!e) {
-      const rows = (it.graficos || {})[tf];  // velas que trae un informe
-      if (Array.isArray(rows) && rows.length) charts.set(key, (e = { rows, at: 0, sd: {} }));
+      const rows = (it.graficos || {})[tf];  // velas que trae un informe: solo se usan sin conexión
+      if (Array.isArray(rows) && rows.length) charts.set(key, (e = { rows, at: 0, live: false, complete: false, sd: {} }));
     }
     return e || null;
+  }
+  // Añade velas: por delante (páginas antiguas), por detrás (las más recientes) o mezcladas por hora de apertura.
+  function addRows(e, page) {
+    if (!page.length) return;
+    if (!e.rows.length) e.rows = page;
+    else if (page[page.length - 1][0] < e.rows[0][0]) e.rows = page.concat(e.rows);
+    else if (page[0][0] > e.rows[e.rows.length - 1][0]) e.rows = e.rows.concat(page);
+    else {
+      const byOpen = new Map();
+      for (const r of e.rows) byOpen.set(r[0], r);
+      for (const r of page) byOpen.set(r[0], r);  // las nuevas sustituyen a las que ya había
+      e.rows = [...byOpen.values()].sort((a, b) => a[0] - b[0]);
+    }
+    e.sd = {};
   }
   function seriesData(it, tf, cut) {
     const e = chartEntry(it, tf);
     if (!e) return null;
-    const k = cut ? "cut" : "all";
+    cut = !!(cut && it.apertura);
+    const k = (it.apertura || "") + (cut ? ":cut" : "");
     if (k in e.sd) return e.sd[k];
     // «Hasta el análisis»: solo las velas que ya habían cerrado cuando empezó la vela de la explosión.
     const rows = cut ? e.rows.filter((r) => r[0] + TF_MS[tf] <= it.apertura) : e.rows;
@@ -758,10 +813,11 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
     const volume = rows.map((r, i) => ({ time: candles[i].time, value: r[5], up: r[4] >= r[1] }));
     // Primera vela del día de la explosión y del día de análisis en esta temporalidad.
     const first = (from, to) => { const i = rows.findIndex((r) => r[0] >= from); return i >= 0 && rows[i][0] < to ? i : -1; };
-    const exp = first(it.apertura, it.apertura + DAY);
-    const ana = first(it.apertura - DAY, it.apertura);
+    const exp = it.apertura ? first(it.apertura, it.apertura + DAY) : -1;
+    const ana = it.apertura ? first(it.apertura - DAY, it.apertura) : -1;
+    const lst = it._listado && e.complete ? 0 : -1;  // con el historial entero, la primera vela es la del listado
     const focus = exp >= 0 ? exp : rows.length - 1;
-    return (e.sd[k] = { candles, raw, mas, volume, exp, ana, focus });
+    return (e.sd[k] = { candles, raw, mas, volume, exp, ana, lst, focus });
   }
   function chartOptions(t, isBig) {
     return {
@@ -770,7 +826,9 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
       layout: { background: { type: "solid", color: t.panel }, textColor: t.muted, fontFamily: t.mono, fontSize: isBig ? 12 : 10, attributionLogo: false },
       grid: { vertLines: { color: t.grid }, horzLines: { color: t.grid } },
       rightPriceScale: { borderColor: t.line, entireTextOnly: true, scaleMargins: isBig ? { top: 0.08, bottom: 0.24 } : { top: 0.12, bottom: 0.08 } },
-      timeScale: { borderColor: t.line, timeVisible: true, secondsVisible: false, rightOffset: isBig ? 6 : 2, fixLeftEdge: !isBig },
+      // minBarSpacing: en el visor se puede alejar hasta ver el historial entero (decenas de miles de velas).
+      timeScale: { borderColor: t.line, timeVisible: true, secondsVisible: false, rightOffset: isBig ? 6 : 2, fixLeftEdge: !isBig,
+        minBarSpacing: isBig ? 0.001 : 0.5 },
       crosshair: isBig ? { mode: LightweightCharts.CrosshairMode.Normal }
         : { vertLine: { visible: false, labelVisible: false }, horzLine: { visible: false, labelVisible: false } },
       handleScroll: isBig, handleScale: isBig,
@@ -778,6 +836,7 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
   }
   function markersFor(sd, t, isBig) {
     const out = [];
+    if (sd.lst >= 0) out.push({ time: sd.candles[sd.lst].time, position: "belowBar", color: t.accent, shape: "arrowUp", text: isBig ? "Listado" : "" });
     if (sd.ana >= 0) out.push({ time: sd.candles[sd.ana].time, position: "belowBar", color: t.accent, shape: "arrowUp", text: isBig ? "Análisis" : "" });
     if (sd.exp >= 0) out.push({ time: sd.candles[sd.exp].time, position: "aboveBar", color: t.hot, shape: "arrowDown", text: isBig ? "Explosión" : "" });
     return out;
@@ -793,8 +852,10 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
     entry.candles.setMarkers(markersFor(entry.sd, t, entry.isBig));
   }
   // Rango inicial: la explosión (o la última vela) a la derecha, con algo de margen para ver lo que pasó después.
+  // Sin explosión y con poco historial (una moneda recién listada), se ve entero.
   function focusRange(sd, tf, isBig) {
     const n = sd.candles.length;
+    if (isBig && sd.exp < 0 && n <= 300) return { from: 0, to: n - 1 + 6 };
     const after = tf === "1d" ? (isBig ? 12 : 3) : Math.round((isBig ? 2 : 1) * DAY / TF_MS[tf]);
     const end = Math.min(n - 1, sd.focus + after);
     const visible = isBig ? 150 : SIZES[state.size];
@@ -810,7 +871,7 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
     }
     const t = tokens();
     const chart = LightweightCharts.createChart(el, chartOptions(t, isBig));
-    const d = decimals(it.close || it.open);
+    const d = decimals(it.close || it.open || sd.candles[sd.candles.length - 1].close);
     const priceFormat = { type: "price", precision: d, minMove: Math.pow(10, -d) };
     const candles = chart.addCandlestickSeries({ priceFormat });
     candles.setData(sd.candles);
@@ -881,8 +942,10 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
     $("v-sym").append(it.base || it.simbolo, h("small", { text: it.quote ? "/" + it.quote : "" }));
     $("v-badge").textContent = MARKET_NAMES[it.mercado] || it.mercado;
     $("v-price").textContent = "";
-    $("v-price").append("Cierre ", h("b", { text: fmtPrice(it.close) }));
-    $("v-pcts").replaceWith(Object.assign(pctBlock(it), { id: "v-pcts" }));
+    if (it._listado) $("v-price").append("Inicial ", h("b", { text: fmtPrice(it._listado.p) }));
+    else $("v-price").append("Cierre ", h("b", { text: fmtPrice(it.close) }));
+    $("v-pcts").replaceWith(Object.assign(it._listado ? listPctBlock(it) : pctBlock(it), { id: "v-pcts" }));
+    $("v-cut").hidden = !it.apertura;  // «Hasta el análisis» solo tiene sentido con una explosión
     renderViewerStats(it, index);
     const link = $("v-link");
     link.href = binanceUrl(it);
@@ -894,6 +957,7 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
   function renderViewerStats(it, index) {
     const stats = $("v-stats");
     stats.textContent = "";
+    if (it._listado) { stats.append(...listStats(it, index)); return; }
     const ana = analysisPct(it);
     const now = it.ahora ?? liveNow.get(it.mercado + ":" + it.simbolo);
     const since = now != null && it.close ? (now - it.close) / it.close * 100 : null;
@@ -936,17 +1000,22 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
       renderViewerStats(it, index);
       big = buildChart(el, it, true, tf, state.cut);
       const sd = seriesData(it, tf, state.cut);
-      const last = sd ? sd.candles.length - 1 : -1;
       updateLegend(sd ? sd.focus : -1);
       if (big) {
-        big.chart.subscribeCrosshairMove((p) => {
-          const idx = p && p.logical != null ? Math.round(p.logical) : sd.focus;
-          updateLegend(idx >= 0 && idx <= last ? idx : sd.focus);
+        const chart = big;
+        chart.chart.subscribeCrosshairMove((p) => {
+          const cur = chart.sd, last = cur.candles.length - 1;  // cur cambia al llegar el historial
+          const idx = p && p.logical != null ? Math.round(p.logical) : cur.focus;
+          updateLegend(idx >= 0 && idx <= last ? idx : cur.focus);
         });
       }
+      renderHist(false);
+      loadHistory(it, tf);  // el resto del historial, en segundo plano
     };
     tfs();
     renderCut();
+    historyRun = null;  // deja de descargar el historial del gráfico anterior
+    $("v-hist").textContent = "";
     if (isFresh(it, tf)) { render(); return; }
     closeBig();
     el.textContent = "";
@@ -956,7 +1025,35 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
   function closeBig() {
     if (big) { big.chart.remove(); big = null; }
   }
+  // Llegaron velas más antiguas: se redibuja con ellas sin mover lo que se está viendo.
+  function extendBig(it, tf) {
+    if (!big || big.item !== it || big.tf !== tf) return;
+    const sd = seriesData(it, tf, state.cut);
+    if (!sd || sd === big.sd) return;
+    const ts = big.chart.timeScale();
+    const r = ts.getVisibleLogicalRange();
+    const added = sd.candles.length - big.sd.candles.length;  // las nuevas van delante: los índices se desplazan
+    big.sd = sd;
+    big.candles.setData(sd.candles);
+    big.mas.forEach((series, i) => series.setData(sd.mas[i]));
+    applyColors(big, tokens());  // volumen y marcas
+    if (r && added > 0) ts.setVisibleLogicalRange({ from: r.from + added, to: r.to + added });
+  }
+  function renderHist(loading) {
+    const el = $("v-hist");
+    const it = state.view[state.current];
+    const e = it && !$("viewer").hidden ? chartEntry(it, state.vtf) : null;
+    if (!e || !e.rows.length) { el.textContent = ""; return; }
+    const n = e.rows.length.toLocaleString("es-ES");
+    const since = lima(e.rows[0][0]).toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+    const tf = tfLabel(state.vtf);
+    el.textContent = e.complete ? "Historial completo: " + n + " velas de " + tf + " desde el " + since
+      : loading ? "Cargando el historial… " + n + " velas de " + tf + " desde el " + since
+      : e.rows.length >= MAX_ROWS ? n + " velas de " + tf + " desde el " + since + " (máximo por gráfico)"
+      : n + " velas de " + tf + " desde el " + since + (e.live ? "" : " (las del informe: sin conexión con Binance)");
+  }
   function closeViewer() {
+    historyRun = null;
     closeBig();
     $("viewer").hidden = true;
     document.body.classList.remove("viewing");
@@ -968,7 +1065,7 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
     if (target) target.focus({ preventScroll: false });
   }
   function setCut(cut) {
-    if (state.cut === cut || $("viewer").hidden) return;
+    if (state.cut === cut || $("viewer").hidden || !state.view[state.current].apertura) return;
     state.cut = cut;
     drawBig(state.view[state.current], state.current);
   }
@@ -1103,12 +1200,35 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
   const row = (k) => [Number(k[0]), +k[1], +k[2], +k[3], +k[4], +k[5]];
   const isList = (d) => Array.isArray(d);
   const isInfo = (d) => !!d && Array.isArray(d.symbols);
+  // Hasta dónde hay que tener velas para dibujar el gráfico de una moneda: un poco antes de la explosión (para ver
+  // de dónde venía) o, si es una moneda listada, desde el listado.
+  function needFrom(it, tf) {
+    if (it._listado) return it._listado.t;
+    return it.apertura ? it.apertura - 200 * TF_MS[tf] : null;
+  }
+  function covers(e, it, tf) {
+    const from = needFrom(it, tf);
+    return from == null || e.complete || (e.rows.length > 0 && e.rows[0][0] <= from);
+  }
   function isFresh(it, tf) {
     const e = chartEntry(it, tf);
-    return !!e && e.at > 0 && Date.now() - e.at < CHART_TTL;
+    return !!e && e.live && Date.now() - e.at < CHART_TTL && covers(e, it, tf);
   }
-  // Descarga las velas de una moneda en esa temporalidad alrededor del día de la explosión. Si no se puede
-  // (sin conexión, Binance no responde), el gráfico usa las velas que ya traía el informe, si las hay.
+  async function fetchPage(it, tf, params) {
+    const cfg = API[it.mercado];
+    const rows = await liveApi(it.mercado).get(cfg.klines, Object.assign({ symbol: it.simbolo, interval: tf, limit: String(PAGE) }, params),
+      cfg.klinesW(PAGE), isList);
+    return rows.map(row);
+  }
+  // Una página de velas más antiguas que las que ya hay; si viene incompleta, ya se llegó al listado.
+  async function loadOlder(e, it, tf) {
+    const page = await fetchPage(it, tf, { endTime: String(e.rows[0][0] - 1) });
+    if (page.length < PAGE) e.complete = true;
+    addRows(e, page);
+  }
+  // Las velas más recientes (el máximo por petición, renovadas cada CHART_TTL) y, si la explosión o el listado
+  // quedan más atrás, páginas antiguas hasta cubrirlos. Si no se puede (sin conexión, Binance no responde), el
+  // gráfico usa las velas que ya traía el informe, si las hay.
   function loadCandles(it, tf) {
     const cfg = API[it.mercado];
     if (!cfg || !TF_MS[tf] || isFresh(it, tf) || Date.now() - (liveDown[it.mercado] || 0) < 60000) {
@@ -1116,20 +1236,40 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
     }
     const key = chartKey(it, tf);
     if (!pendingCandles.has(key)) {
-      const params = { symbol: it.simbolo, interval: tf, startTime: String(it.apertura - CHART_BEFORE * TF_MS[tf]), limit: String(CHART_LIMIT) };
-      pendingCandles.set(key, liveApi(it.mercado).get(cfg.klines, params, cfg.klinesW(CHART_LIMIT), isList)
-        .then((rows) => {
-          const data = rows.map(row);
-          if (!data.length) return !!chartEntry(it, tf);
-          charts.set(key, { rows: data, at: Date.now(), sd: {} });
-          const last = data[data.length - 1];
+      pendingCandles.set(key, (async () => {
+        let e = charts.get(key);
+        if (!e || !e.live || Date.now() - e.at >= CHART_TTL) {
+          const page = await fetchPage(it, tf, {});
+          if (!page.length) return !!chartEntry(it, tf);
+          if (!e || !e.live) charts.set(key, (e = { rows: [], at: 0, live: true, complete: false, sd: {} }));
+          addRows(e, page);
+          e.at = Date.now();
+          if (page.length < PAGE) e.complete = true;  // todo el historial cabe en una página
+          const last = page[page.length - 1];
           if (last[0] + TF_MS[tf] > Date.now()) liveNow.set(it.mercado + ":" + it.simbolo, last[4]);  // la vela en curso: precio actual
-          return true;
-        })
+        }
+        for (let n = 0; n < 30 && !covers(e, it, tf); n++) await loadOlder(e, it, tf);
+        return true;
+      })()
         .catch((err) => { if (err && err.fatal) liveDown[it.mercado] = Date.now(); return !!chartEntry(it, tf); })
         .finally(() => pendingCandles.delete(key)));
     }
     return pendingCandles.get(key);
+  }
+  // Con el visor abierto se descarga el resto del historial, página a página hacia atrás, y el gráfico se amplía
+  // sin moverse. Solo una descarga a la vez: la del gráfico que se está viendo.
+  let historyRun = null;
+  async function loadHistory(it, tf) {
+    const run = (historyRun = {});
+    const key = chartKey(it, tf);
+    try { await pendingCandles.get(key); } catch (err) { /* ya se avisa en el gráfico */ }
+    const e = charts.get(key);
+    while (historyRun === run && e && e.live && !e.complete && e.rows.length < MAX_ROWS) {
+      renderHist(true);
+      try { await loadOlder(e, it, tf); } catch (err) { break; }
+      if (historyRun === run) extendBig(it, tf);
+    }
+    if (historyRun === run) { historyRun = null; renderHist(false); }
   }
 
   // ---------- escáner en el navegador ----------
@@ -1487,12 +1627,8 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
       track.remoteLoaded = true;
     } catch (err) { /* página abierta como archivo o en otro alojamiento: solo hay datos de este navegador */ }
   }
-  async function refreshPrices() {
-    const markets = [...new Set(allDays().flatMap((d) => d.monedas.map((c) => c.mercado)))].filter((m) => API[m]);
-    if (!markets.length) { renderTracking(); return; }
-    const button = $("track-refresh");
-    button.disabled = true;
-    $("track-status").textContent = "Actualizando precios…";
+  // Precio actual de todos los pares de esos mercados (lo usan el seguimiento y las monedas listadas).
+  async function loadPrices(markets) {
     const problems = [];
     await Promise.all(markets.map(async (m) => {
       try {
@@ -1502,6 +1638,15 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
         problems.push(API[m].nombre + ": " + err.message);
       }
     }));
+    return problems;
+  }
+  async function refreshPrices() {
+    const markets = [...new Set(allDays().flatMap((d) => d.monedas.map((c) => c.mercado)))].filter((m) => API[m]);
+    if (!markets.length) { renderTracking(); return; }
+    const button = $("track-refresh");
+    button.disabled = true;
+    $("track-status").textContent = "Actualizando precios…";
+    const problems = await loadPrices(markets);
     button.disabled = false;
     $("track-status").textContent = "Precios de las " + fmtTime(Date.now()) + " · se actualizan cada minuto";
     showTrackNotice(problems.length ? "Aviso. " : "", problems.join(" "));
@@ -1856,22 +2001,298 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
       msg.textContent = "No se pudo conectar: " + err.message + ".";
     }
   }
+  // ---------- monedas listadas 2026 ----------
+  // Todas las monedas que Binance listó en 2026 (spot y futuros, en USDT), hayan subido o no, agrupadas por mes de
+  // listado. Futuros: exchangeInfo trae la fecha de lanzamiento de cada contrato (onboardDate). Spot: es la primera
+  // vela de 1 minuto del par. Las fechas vienen de listados.json (lo actualiza el escaneo diario); lo que falte se
+  // pide a Binance una sola vez y se guarda en este navegador.
+  const LIST_YEAR = 2026;
+  const LIST_FROM = Date.UTC(LIST_YEAR, 0, 1) - ZONA.offset;  // 1 ene 2026 00:00 hora Lima
+  const MONTHS = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+  const LIST_SORTS = {
+    desde: (a, b) => (b.desde ?? -Infinity) - (a.desde ?? -Infinity),
+    moneda: (a, b) => a.simbolo.localeCompare(b.simbolo),
+  };
+  const listing = { pares: null, market: "todos", order: "reciente", sort: "fecha", q: "", loading: null, updated: 0 };
+  // Los mismos filtros que el escáner, pero también los pares que ya no cotizan (si se listaron en 2026, cuentan).
+  const listable = (key, s) => s.status !== "PRE_TRADING" && s.status !== "PENDING_TRADING" && s.quoteAsset === "USDT" &&
+    !STABLES.has(s.baseAsset) && (key === "spot" ? s.isSpotTradingAllowed !== false : s.contractType === "PERPETUAL" && !NON_CRYPTO.has(s.underlyingType));
+  function loadListings() {
+    if (listing.loading) return listing.loading;
+    const status = $("list-status");
+    listing.loading = (async () => {
+      status.textContent = "Cargando las monedas listadas…";
+      const pares = {}, problems = [];
+      try {
+        const resp = await fetch("listados.json?t=" + Date.now(), { cache: "no-store" });
+        if (resp.ok) {
+          for (const [k, v] of Object.entries((await resp.json()).pares || {})) {
+            const [mercado, simbolo] = k.split(":");
+            if (!API[mercado] || !simbolo || !v || !v.listado) continue;
+            pares[k] = { mercado, simbolo, base: v.base || simbolo.replace(/USDT$/, ""), quote: "USDT", listado: v.listado,
+              precio_inicial: v.precio_inicial ?? null, estado: null };
+          }
+        }
+      } catch (err) { /* sin listados.json publicado: todo se pide a Binance */ }
+      const cache = readJSON("listados", {});
+      const jobs = [];
+      for (const key of ["spot", "futures"]) {
+        try {
+          const info = await liveApi(key).get(API[key].info, null, API[key].infoW, isInfo);
+          let symbols = (info.symbols || []).filter((s) => listable(key, s));
+          if (key === "spot") {
+            const stocks = await loadStockList();
+            if (stocks) symbols = symbols.filter((s) => !stocks.has(s.symbol));
+          }
+          for (const s of symbols) {
+            const k = key + ":" + s.symbol;
+            const p = pares[k] || (pares[k] = { mercado: key, simbolo: s.symbol, base: s.baseAsset, quote: s.quoteAsset, listado: null, precio_inicial: null });
+            p.estado = s.status;
+            if (key === "futures" && s.onboardDate) p.listado = Number(s.onboardDate);
+            const c = cache[k] || {};
+            if (p.listado == null && c.t) p.listado = c.t;
+            if (p.precio_inicial == null && c.p != null) p.precio_inicial = c.p;
+            const missing = p.listado == null || (p.listado >= LIST_FROM && p.listado <= Date.now() && p.precio_inicial == null);
+            if (missing && !(c.x && Date.now() - c.x < DAY)) jobs.push(p);  // si falló hace poco, se reintenta mañana
+          }
+        } catch (err) {
+          problems.push(API[key].nombre + ": " + err.message);
+        }
+      }
+      // La primera vela de 1 minuto de lo que falta: da la fecha de listado (spot) y el precio inicial.
+      let done = 0;
+      await runPool(jobs, 6, async (p) => {
+        const k = p.mercado + ":" + p.simbolo, cfg = API[p.mercado];
+        try {
+          const rows = await liveApi(p.mercado).get(cfg.klines, { symbol: p.simbolo, interval: "1m", startTime: String(p.listado ?? 0), limit: "1" },
+            cfg.klinesW(1), isList);
+          if (rows.length) {
+            if (p.listado == null) p.listado = Number(rows[0][0]);
+            if (p.listado >= LIST_FROM) p.precio_inicial = +rows[0][1];
+            cache[k] = { t: p.listado, p: p.precio_inicial };
+          }
+        } catch (err) {
+          cache[k] = Object.assign({}, cache[k], { x: Date.now() });
+        } finally {
+          if (++done % 10 === 0 || done === jobs.length) {
+            status.textContent = "Buscando la fecha de listado en Binance: " + done + "/" + jobs.length + " pares (solo la primera vez)…";
+          }
+        }
+      });
+      if (jobs.length) store.set("listados", JSON.stringify(cache));
+      listing.pares = pares;
+      listing.failed = problems.length > 0 && !Object.keys(pares).length;  // ni archivo ni Binance
+      problems.push(...await loadPrices(["spot", "futures"]));
+      listing.updated = Date.now();
+      status.textContent = "Actualizado a las " + fmtTime(listing.updated) + " · los precios se actualizan cada minuto";
+      showListNotice(problems.length ? "Aviso. " : "", problems.join(" "));
+    })().finally(() => { listing.loading = null; });
+    return listing.loading;
+  }
+  function showListNotice(label, text) {
+    const n = $("list-notice");
+    n.textContent = "";
+    n.hidden = !(label || text);
+    if (label) n.append(h("b", { text: label }));
+    if (text) n.append(text);
+  }
+  function listItems() {
+    const now = Date.now(), out = [];
+    for (const p of Object.values(listing.pares || {})) {
+      if (p.listado == null || p.listado < LIST_FROM || p.listado > now) continue;
+      const prices = track.prices[p.mercado];
+      const ahora = prices && prices.has(p.simbolo) ? prices.get(p.simbolo) : null;
+      const desde = ahora != null && p.precio_inicial ? (ahora - p.precio_inicial) / p.precio_inicial * 100 : null;
+      out.push(Object.assign({}, p, { ahora, desde, _listado: { t: p.listado, p: p.precio_inicial } }));
+    }
+    return out;
+  }
+  const monthKey = (ms) => lima(ms).toISOString().slice(0, 7);  // «2026-03», en hora Lima
+  function monthTitle(key) {
+    const [y, m] = key.split("-").map(Number);
+    return MONTHS[m - 1].charAt(0).toUpperCase() + MONTHS[m - 1].slice(1) + " " + y;
+  }
+  const fmtListed = (ms) => lima(ms).toLocaleString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "UTC" });
+  // Días del seguimiento en que cada moneda tuvo una explosión, del más reciente al más antiguo.
+  function explosionsByCoin() {
+    const idx = new Map();
+    for (const d of allDays()) {
+      for (const c of d.monedas) {
+        const k = coinKey(c);
+        if (!idx.has(k)) idx.set(k, []);
+        idx.get(k).push({ fecha: d.fecha, pct: c.pct_rango });
+      }
+    }
+    return idx;
+  }
+  function explosionCell(list) {
+    if (!list || !list.length) return "—";
+    const wrap = document.createDocumentFragment();
+    wrap.append(h("b", { text: String(list.length) }), " · última " + shortDate(list[0].fecha) + " ", h("span", { class: "hot", text: fmtPct(list[0].pct) }));
+    return wrap;
+  }
+  function isMonthOpen(key, index) {
+    const states = readJSON("listados-abiertos", {});
+    return key in states ? states[key] : index === 0;  // por defecto, solo el primer mes de la lista
+  }
+  function toggleMonth(key, index) {
+    const states = readJSON("listados-abiertos", {});
+    states[key] = !isMonthOpen(key, index);
+    store.set("listados-abiertos", JSON.stringify(states));
+    renderListing();
+  }
+  function listTable(coins, offset, flat, expl) {
+    const table = h("table", { class: "coins list" });
+    table.append(h("thead", null, h("tr", null,
+      h("th", { text: "Moneda" }),
+      h("th", { text: "Listada", title: "Fecha y hora de listado en " + ZONA.nombre }),
+      h("th", { class: "r", text: "Precio inicial", title: "Apertura de la primera vela de 1 minuto" }),
+      h("th", { class: "r", text: "Precio actual" }),
+      h("th", { class: "r", text: "Desde el listado", title: "Variación del precio actual respecto al precio inicial" }),
+      h("th", { text: "Explosiones", title: "Días del seguimiento en que su vela diaria subió un " + MIN_PCT + " % o más" }))));
+    const body = h("tbody");
+    coins.forEach((c, i) => {
+      const off = c.estado && c.estado !== "TRADING";
+      const tr = h("tr", { tabindex: "0", title: "Ver el gráfico de " + c.simbolo },
+        h("td", { class: "c-coin" }, h("span", { class: "coin" }, c.base || c.simbolo, h("small", { text: c.quote ? "/" + c.quote : "" })),
+          h("span", { class: "badge", text: MARKET_NAMES[c.mercado] || c.mercado }),
+          off ? h("span", { class: "badge off", text: "No cotiza", title: "Estado en Binance: " + c.estado }) : null),
+        h("td", { class: "c-date", "data-label": "Listada" }, fmtListed(c.listado)),
+        h("td", { class: "r num c-first", "data-label": "Inicial", text: c.precio_inicial == null ? "—" : fmtPrice(c.precio_inicial) }),
+        h("td", { class: "r num c-now", "data-label": "Ahora", text: c.ahora == null ? "—" : fmtPrice(c.ahora) }),
+        h("td", { class: "r num c-since " + (c.desde == null ? "" : c.desde >= 0 ? "up" : "down") }, c.desde == null ? "—" : fmtPct(c.desde), changeBar(c.desde)),
+        h("td", { class: "c-expl", "data-label": "Explosiones" }, explosionCell(expl.get(coinKey(c)))));
+      const open = () => openTrackedChart(flat, offset + i);
+      tr.addEventListener("click", open);
+      tr.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } });
+      body.append(tr);
+    });
+    table.append(body);
+    return h("div", { class: "day-body" }, table);
+  }
+  function monthCard(key, coins, index, offset, flat, expl) {
+    const open = isMonthOpen(key, index);
+    const toggle = h("button", { class: "day-toggle", type: "button", "aria-expanded": String(open) });
+    toggle.innerHTML = ICON_CHEVRON;
+    toggle.append(h("h2", { text: monthTitle(key) }));
+    toggle.addEventListener("click", () => toggleMonth(key, index));
+    const spot = coins.filter((c) => c.mercado === "spot").length;
+    const priced = coins.filter((c) => c.desde != null);
+    const avg = priced.length ? priced.reduce((sum, c) => sum + c.desde, 0) / priced.length : null;
+    const best = priced.length ? priced.reduce((a, b) => (b.desde > a.desde ? b : a)) : null;
+    const exploded = coins.filter((c) => expl.has(coinKey(c))).length;
+    const stats = h("div", { class: "day-stats" },
+      h("span", null, h("b", { text: String(coins.length) }), coins.length === 1 ? " moneda" : " monedas"),
+      h("span", null, "Spot ", h("b", { text: String(spot) }), " · Futuros ", h("b", { text: String(coins.length - spot) })),
+      avg == null ? null : h("span", null, "Desde el listado: media ", h("b", { class: avg >= 0 ? "up" : "down", text: fmtPct(avg) })),
+      priced.length ? h("span", null, h("b", { class: "up", text: "▲ " + priced.filter((c) => c.desde > 0).length }), " suben · ",
+        h("b", { class: "down", text: "▼ " + priced.filter((c) => c.desde < 0).length }), " bajan") : null,
+      priced.length > 1 ? h("span", null, "Mejor ", h("b", { text: (best.base || best.simbolo) + " " + fmtPct(best.desde) })) : null,
+      exploded ? h("span", null, h("b", { text: String(exploded) }), " con explosiones en el seguimiento") : null);
+    const cardEl = h("article", { class: "day" }, h("header", { class: "day-head" }, toggle, stats));
+    if (open) cardEl.append(listTable(coins, offset, flat, expl));
+    return cardEl;
+  }
+  function renderListing() {
+    const all = listItems();
+    const seg = $("list-market");
+    seg.textContent = "";
+    for (const [key, label] of [["todos", "Todos"], ["spot", "Spot"], ["futures", "Futuros"], ["unicas", "No repetidas"]]) {
+      const b = h("button", { type: "button", "aria-pressed": String(key === listing.market) }, label,
+        h("span", { class: "count", text: String(byMarket(all, key).length) }));
+      b.addEventListener("click", () => { listing.market = key; renderListing(); });
+      seg.append(b);
+    }
+    $("list-order").value = listing.order;
+    $("list-sort").value = listing.sort;
+    const spot = all.filter((c) => c.mercado === "spot").length;
+    $("list-note").textContent = (listing.pares ? all.length + " monedas listadas en " + LIST_YEAR + " (spot " + spot + " · futuros " +
+      (all.length - spot) + "). " : "") + "Fecha de listado: en futuros, la del lanzamiento del contrato; en spot, la primera vela del par " +
+      "(en " + ZONA.nombre + "). Precio inicial: la apertura de su primera vela de 1 minuto. Pulsa una moneda para ver su gráfico desde el listado.";
+    const list = $("list-months");
+    list.textContent = "";
+    if (!listing.pares) {
+      list.append(h("div", { class: "empty", text: listing.loading ? "Buscando las monedas listadas en " + LIST_YEAR + "…" : "No se pudieron cargar las monedas listadas. Pulsa «Actualizar»." }));
+      return;
+    }
+    const q = listing.q.trim().toUpperCase();
+    const items = byMarket(all, listing.market).filter((c) => !q || c.simbolo.toUpperCase().includes(q) || String(c.base).toUpperCase().includes(q));
+    if (!items.length) {
+      list.append(h("div", { class: "empty", text: all.length ? "Ninguna moneda coincide con el filtro."
+        : listing.failed ? "No se pudo conectar con Binance para buscar las monedas listadas. Pulsa «Actualizar» para reintentar."
+        : "No hay monedas listadas en " + LIST_YEAR + "." }));
+      return;
+    }
+    const groups = new Map();
+    for (const c of items) {
+      const k = monthKey(c.listado);
+      if (!groups.has(k)) groups.set(k, []);
+      groups.get(k).push(c);
+    }
+    const newestFirst = listing.order === "reciente";
+    const keys = [...groups.keys()].sort();
+    if (newestFirst) keys.reverse();
+    const byDate = (a, b) => (newestFirst ? b.listado - a.listado : a.listado - b.listado);
+    const expl = explosionsByCoin();
+    const flat = [];  // en el orden de la pantalla: «Siguiente» en el visor recorre todas
+    keys.forEach((k, index) => {
+      const coins = groups.get(k).sort(LIST_SORTS[listing.sort] || byDate);
+      const offset = flat.length;
+      flat.push(...coins);
+      list.append(monthCard(k, coins, index, offset, flat, expl));
+    });
+  }
+  // Visor de una moneda listada: su variación desde el listado en lugar de las subidas de una vela.
+  function listPctBlock(it) {
+    return h("div", { class: "pcts" }, h("span", { class: "pct", title: "Del precio inicial (primera vela de 1 minuto) al precio actual" },
+      h("small", { text: "Desde el listado" }), h("b", { class: it.desde == null ? "" : it.desde >= 0 ? "up" : "down", text: fmtPct(it.desde) })));
+  }
+  function listStats(it, index) {
+    const ex = explosionsByCoin().get(coinKey(it)) || [];
+    const off = it.estado && it.estado !== "TRADING";
+    return [
+      h("span", { class: "tf-tag ana", text: "Listada " + fmtListed(it.listado), title: "Fecha y hora de listado en " + ZONA.nombre }),
+      off ? h("span", { class: "tf-tag hot", text: "No cotiza (" + it.estado + ")" }) : null,
+      it.ahora == null ? null : h("span", null, "Ahora ", h("b", { text: fmtPrice(it.ahora) })),
+      ex.length ? h("span", null, "Explosiones ", h("b", { text: String(ex.length) }), " · última " + shortDate(ex[0].fecha) + " ",
+        h("b", { class: "hot", text: fmtPct(ex[0].pct) })) : null,
+      h("span", null, h("b", { text: (index + 1) + "/" + state.view.length })),
+    ].filter(Boolean);
+  }
+  $("list-order").addEventListener("change", (e) => { listing.order = e.target.value; store.set("listados-orden", listing.order); renderListing(); });
+  $("list-sort").addEventListener("change", (e) => { listing.sort = e.target.value; renderListing(); });
+  $("list-search").addEventListener("input", (e) => { listing.q = e.target.value; renderListing(); });
+  $("list-refresh").addEventListener("click", () => { const done = loadListings().then(renderListing); renderListing(); return done; });
+  listing.order = store.get("listados-orden") === "enero" ? "enero" : "reciente";
+
+  // Pestañas: Escáner (#), Monedas listadas 2026 (#listadas) y Seguimiento (#seguimiento).
+  const VIEW_HASH = { scan: "", list: "listadas", track: "seguimiento" };
+  function viewFromHash() { return location.hash === "#seguimiento" ? "track" : location.hash === "#listadas" ? "list" : "scan"; }
   function showView(view) {
-    const tracking = view === "track";
-    document.body.classList.toggle("tracking", tracking);
-    $("view-track").hidden = !tracking;
-    for (const b of $("views").querySelectorAll("button")) b.setAttribute("aria-pressed", String((b.dataset.view === "track") === tracking));
+    document.body.classList.toggle("tracking", view === "track");
+    document.body.classList.toggle("listing", view === "list");
+    $("view-track").hidden = view !== "track";
+    $("view-list").hidden = view !== "list";
+    for (const b of $("views").querySelectorAll("button")) b.setAttribute("aria-pressed", String(b.dataset.view === view));
     clearInterval(track.timer);
     track.timer = null;
-    if (!tracking) return;
-    renderTracking();
-    loadRemote().then(() => { renderTracking(); refreshPrices(); });
-    track.timer = setInterval(() => { if (document.visibilityState === "visible") refreshPrices(); }, 60000);
+    if (view === "track") {
+      renderTracking();
+      loadRemote().then(() => { renderTracking(); refreshPrices(); });
+      track.timer = setInterval(() => { if (document.visibilityState === "visible") refreshPrices(); }, 60000);
+    } else if (view === "list") {
+      renderListing();
+      const fresh = listing.pares && Date.now() - listing.updated < 30 * 60000;  // si no, se vuelven a pedir los pares nuevos
+      Promise.all([loadRemote(), fresh ? loadPrices(["spot", "futures"]) : loadListings()]).then(() => { if (!$("view-list").hidden) renderListing(); });
+      track.timer = setInterval(() => {
+        if (document.visibilityState === "visible") loadPrices(["spot", "futures"]).then(() => { if (!$("view-list").hidden) renderListing(); });
+      }, 60000);
+    }
   }
   for (const b of $("views").querySelectorAll("button")) {
-    b.addEventListener("click", () => { location.hash = b.dataset.view === "track" ? "seguimiento" : ""; });
+    b.addEventListener("click", () => { location.hash = VIEW_HASH[b.dataset.view] || ""; });
   }
-  window.addEventListener("hashchange", () => showView(location.hash === "#seguimiento" ? "track" : "scan"));
+  window.addEventListener("hashchange", () => showView(viewFromHash()));
   $("track-sort").addEventListener("change", (e) => { track.sort = e.target.value; store.set("seguimiento-orden", track.sort); renderTracking(); });
   $("track-minpct").addEventListener("change", (e) => { track.minPct = Number(e.target.value) || MIN_PCT; renderTracking(); });
   $("track-refresh").addEventListener("click", () => refreshPrices());
@@ -1912,7 +2333,7 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
   if (!window.LightweightCharts) {
     renderNotice("Sin gráficos. ", "No se pudo cargar la librería de gráficos; revisa tu conexión a internet.", true);
   }
-  if (location.hash === "#seguimiento") showView("track");
+  if (viewFromHash() !== "scan") showView(viewFromHash());
   syncPending();  // días guardados sin conexión con GitHub
 })();
 </script>

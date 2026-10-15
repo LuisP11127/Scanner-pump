@@ -3,6 +3,7 @@
     python -m scanner_pump.web site                                   # escribe site/index.html
     python -m scanner_pump.web site --seguimiento datos/seguimiento   # y site/seguimiento.json con todos los días
     python -m scanner_pump.web site --bstocks                         # y site/bstocks.json (acciones tokenizadas)
+    python -m scanner_pump.web site --listados datos/listados.json    # y site/listados.json (fechas de listado)
 """
 
 from __future__ import annotations
@@ -14,6 +15,7 @@ from pathlib import Path
 from typing import Optional, Sequence
 
 from .binance import SPOT, BinanceClient
+from .listados import read_listings
 from .report import render_page
 from .scanner import is_tokenized_stock
 from .seguimiento import collect_days
@@ -37,6 +39,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--seguimiento", metavar="CARPETA",
                         help="unir los archivos de seguimiento de CARPETA en seguimiento.json")
     parser.add_argument("--bstocks", action="store_true", help="escribir también bstocks.json")
+    parser.add_argument("--listados", metavar="ARCHIVO",
+                        help="publicar las fechas de listado de ARCHIVO (datos/listados.json) como listados.json")
     args = parser.parse_args(argv)
 
     out = Path(args.carpeta)
@@ -48,6 +52,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         days = collect_days(Path(args.seguimiento))
         write_json(out / "seguimiento.json", {"generado": generated, "dias": days})
         print(f"{len(days)} días de seguimiento en {out / 'seguimiento.json'}")
+    if args.listados:
+        pares = read_listings(Path(args.listados))
+        if pares:
+            write_json(out / "listados.json", {"generado": generated, "pares": pares})
+            print(f"{len(pares)} fechas de listado en {out / 'listados.json'}")
+        else:
+            print(f"Aviso: {args.listados} no existe o está vacío; la web buscará las fechas de listado en Binance.")
     if args.bstocks:
         try:
             symbols = stock_symbols()
