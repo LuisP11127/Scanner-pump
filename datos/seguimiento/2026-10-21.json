@@ -48,7 +48,7 @@
     "high": 0.38293,
     "low": 0.27828,
     "close": 0.32305,
-    "volumen": 54074924.0,
+    "volumen": 54074924,
     "pct_rango": 37.606,
     "pct_cuerpo": 15.569
    }
@@ -366,7 +366,7 @@
    "low": 0.0078,
    "close": 0.00885,
    "volumen": 4115516.43,
-   "pct_rango": 40.0,
+   "pct_rango": 40,
    "pct_cuerpo": -11.5,
    "analisis": {
     "open": 0.01342,
@@ -691,7 +691,7 @@
    "low": 0.0464,
    "close": 0.0505,
    "volumen": 2045495.81,
-   "pct_rango": 25.0,
+   "pct_rango": 25,
    "pct_cuerpo": 3.272,
    "analisis": {
     "open": 0.0483,
@@ -2811,7 +2811,7 @@
    "fecha": "2026-10-21",
    "fecha_analisis": "2026-10-20",
    "apertura": 1792627200000,
-   "open": 622.0,
+   "open": 622,
    "high": 661.97,
    "low": 586.08,
    "close": 601.1,
@@ -3565,7 +3565,7 @@
    "high": 0.010165,
    "low": 0.009066,
    "close": 0.009293,
-   "volumen": 1102673.0,
+   "volumen": 1102673,
    "pct_rango": 12.1222,
    "pct_cuerpo": -7.7526,
    "analisis": {
@@ -4320,7 +4320,7 @@
    "pct_cuerpo": -2.7888,
    "analisis": {
     "open": 25.525,
-    "high": 28.0,
+    "high": 28,
     "low": 25.425,
     "close": 26.965,
     "volumen": 43438664.1,
@@ -4766,7 +4766,7 @@
    "low": 0.004,
    "close": 0.00404,
    "volumen": 441148.61,
-   "pct_rango": 11.0,
+   "pct_rango": 11,
    "pct_cuerpo": -8.39,
    "analisis": {
     "open": 0.00429,
@@ -6626,6 +6626,31 @@
     "volumen": 505562.44,
     "pct_rango": 7.0968,
     "pct_cuerpo": 1.5848
+   }
+  },
+  {
+   "mercado": "spot",
+   "simbolo": "PIXELUSDT",
+   "base": "PIXEL",
+   "quote": "USDT",
+   "fecha": "2026-10-21",
+   "fecha_analisis": "2026-10-20",
+   "apertura": 1792627200000,
+   "open": 0.00545,
+   "high": 0.0055,
+   "low": 0.005,
+   "close": 0.00505,
+   "volumen": 390999.4,
+   "pct_rango": 10,
+   "pct_cuerpo": -7.3394,
+   "analisis": {
+    "open": 0.00528,
+    "high": 0.00562,
+    "low": 0.00524,
+    "close": 0.00544,
+    "volumen": 525851.92,
+    "pct_rango": 7.2519,
+    "pct_cuerpo": 3.0303
    }
   }
  ]
