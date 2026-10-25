@@ -376,6 +376,26 @@ def test_page_dates_match_python():
     assert result["last"] == [last_closed_label(n).isoformat() for n in nows]
 
 
+@pytest.mark.skipif(not shutil.which("node"), reason="hace falta Node.js")
+def test_page_sync_lock_is_released():
+    # Sin nada pendiente, la subida a GitHub dejaba el candado puesto: la siguiente (al terminar un escaneo) se
+    # esperaba a sí misma sin fin y la página dejaba de responder.
+    script = page_script()
+    sync = re.search(r"\n  let syncing = null;\n  function syncPending\(\) \{.*?\n  \}\n", script, re.S).group(0)
+    js = sync + """
+      let calls = 0;
+      const ghConfig = () => ({ token: "t", owner: "o", repo: "r" });
+      async function uploadPending() { calls++; return true; }
+      (async () => {
+        for (let i = 0; i < 3; i++) await syncPending();
+        await Promise.all([syncPending(), syncPending()]);  // la segunda espera a la primera y luego sube lo que quede
+        console.log(JSON.stringify({ calls, syncing }));
+      })();
+    """
+    out = subprocess.run(["node", "-e", js], check=True, capture_output=True, text=True, timeout=20).stdout
+    assert json.loads(out) == {"calls": 5, "syncing": None}
+
+
 # ---------- cliente de Binance ----------
 
 class FakeResponse:

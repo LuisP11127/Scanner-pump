@@ -112,6 +112,8 @@ input[type="search"] { width: 13rem; max-width: 100%; }
 
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 12px 10px; display: grid; gap: 6px; cursor: pointer; min-width: 0; }
 .card:hover { border-color: var(--muted); }
+/* Con cientos de tarjetas, el navegador no calcula ni pinta las que están lejos de la pantalla. */
+.grid > .card { content-visibility: auto; contain-intrinsic-size: auto calc(var(--mini-h) + 204px); }
 .card-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .sym { font: 600 19px/1.1 var(--font-display); letter-spacing: 0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sym small { font-size: 0.72em; color: var(--muted); font-weight: 600; margin-left: 1px; }
@@ -126,7 +128,7 @@ input[type="search"] { width: 13rem; max-width: 100%; }
 .ohlc b { font-weight: 500; color: var(--fg); }
 .ma-legend { display: flex; flex-wrap: wrap; gap: 2px 12px; font: 400 11.5px/1.35 var(--font-mono); font-variant-numeric: tabular-nums; color: var(--muted); }
 .ma-legend span b { font-weight: 500; }
-.mini { height: var(--mini-h); border-radius: 4px; overflow: hidden; background: var(--panel); position: relative; }
+.mini { height: var(--mini-h); border-radius: 4px; overflow: hidden; background: var(--panel); position: relative; contain: strict; }
 .mini .placeholder, .big .placeholder { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 13px; text-align: center; padding: 8px; }
 .tf-tag { font: 500 11px/1 var(--font-mono); color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 3px 5px; white-space: nowrap; }
 .tf-tag.hot { color: var(--hot); border-color: currentColor; }
@@ -472,7 +474,7 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
   const MAX_ROWS = 60000;      // tope de velas por gráfico (2H de casi 14 años)
   const CHART_TTL = 5 * 60000; // cada cuánto se vuelven a pedir las velas más recientes de un gráfico
   const CRITS = { rango: "Mín→Máx", cuerpo: "Apertura→Cierre" };
-  const state = { data: null, origin: null, items: [], view: [], market: "todos", crit: "rango", minPct: MIN_PCT, sort: "rango",
+  const state = { data: null, origin: null, items: [], view: [], shown: 0, market: "todos", crit: "rango", minPct: MIN_PCT, sort: "rango",
     q: "", size: "m", current: -1, tf: "1d", vtf: "1d", cut: false, trackSaved: null };
   const minis = new Map();  // elemento .mini -> entrada de gráfico
   let big = null;
@@ -499,10 +501,13 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
     if (!v) return 2;
     return Math.max(2, Math.min(10, 4 - Math.floor(Math.log10(Math.abs(v)))));
   }
+  // Los formatos se crean una vez: crear uno en cada número o fecha (toLocaleString con opciones) es lento y las
+  // tarjetas y tablas del seguimiento formatean miles.
+  const priceFormats = [];
   function fmtPrice(v) {
     if (v == null || !isFinite(v)) return "-";
     const d = decimals(v);
-    return v.toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
+    return (priceFormats[d] || (priceFormats[d] = new Intl.NumberFormat("en-US", { minimumFractionDigits: d, maximumFractionDigits: d }))).format(v);
   }
   function fmtPct(v) { return v == null || !isFinite(v) ? "-" : (v >= 0 ? "+" : "") + v.toFixed(2) + "%"; }
   function fmtVol(v) {
@@ -542,17 +547,19 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
   }
   function lastClosedOpen(now) { return Math.floor((now || Date.now()) / DAY) * DAY - DAY; }
   function dayDate(label) { const [y, m, d] = label.split("-").map(Number); return new Date(Date.UTC(y, m - 1, d)); }
+  const dateFormat = (opts) => new Intl.DateTimeFormat("es-ES", Object.assign({ timeZone: "UTC" }, opts));
+  const FMT_LONG = dateFormat({ day: "numeric", month: "long" }), FMT_SHORT = dateFormat({ day: "numeric", month: "short" });
+  const FMT_TIME = dateFormat({ hour: "2-digit", minute: "2-digit" });
+  const FMT_DATE_TIME = dateFormat({ day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
   function dayTitle(label) {
     const date = dayDate(label);
-    const text = date.toLocaleDateString("es-ES", { day: "numeric", month: "long", timeZone: "UTC" });
+    const text = FMT_LONG.format(date);
     return date.getUTCFullYear() === new Date().getUTCFullYear() ? text : text + " de " + date.getUTCFullYear();
   }
-  function shortDate(label) { return dayDate(label).toLocaleDateString("es-ES", { day: "numeric", month: "short", timeZone: "UTC" }); }
+  function shortDate(label) { return FMT_SHORT.format(dayDate(label)); }
   const lima = (ms) => new Date(ms + ZONA.offset);
-  function fmtTime(ms) { return lima(ms).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" }); }
-  function fmtDateTime(ms) {
-    return lima(ms).toLocaleString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "UTC" });
-  }
+  function fmtTime(ms) { return FMT_TIME.format(lima(ms)); }
+  function fmtDateTime(ms) { return FMT_DATE_TIME.format(lima(ms)); }
   function daysAgo(label) {
     const n = Math.round((dayDate(labelOf(Date.now())) - dayDate(label)) / DAY);
     return n <= 0 ? "hoy" : n === 1 ? "ayer" : "hace " + n + " días";
@@ -727,34 +734,88 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
     el.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openViewer(index); } });
     return el;
   }
+  // Un escaneo puede encontrar cientos de monedas: las tarjetas se añaden por tandas al bajar y cada mini-gráfico
+  // solo existe mientras está cerca de la pantalla (al alejarse se borra y al volver se dibuja otra vez con las
+  // velas ya descargadas). Así la página nunca tiene más que unas decenas de gráficos a la vez.
+  const GRID_BATCH = 48;
+  const near = new Set(), onScreen = new Set(), queued = new Set();
+  let pumping = false;
   const observer = "IntersectionObserver" in window
     ? new IntersectionObserver((entries) => {
-        for (const e of entries) if (e.isIntersecting) { observer.unobserve(e.target); createMini(e.target); }
-      }, { rootMargin: "400px 0px" })
+        for (const e of entries) {
+          if (e.isIntersecting) { near.add(e.target); queued.add(e.target); }
+          else { near.delete(e.target); queued.delete(e.target); dropMini(e.target); }
+        }
+        if (queued.size && !pumping) { pumping = true; requestAnimationFrame(pumpMinis); }
+      }, { rootMargin: "300px 0px" })
     : null;
+  // Primero se dibujan los que se ven; después, los que están a punto de entrar.
+  const screenObserver = observer && new IntersectionObserver((entries) => {
+    for (const e of entries) if (e.isIntersecting) onScreen.add(e.target); else onScreen.delete(e.target);
+  });
+  // La última tarjeta avisa cuando se acerca a la pantalla para añadir la siguiente tanda.
+  const moreCards = observer ? new IntersectionObserver((entries) => {
+    if (entries.some((e) => e.isIntersecting)) addCards();
+  }, { rootMargin: "1200px 0px" }) : null;
+  // Unos pocos gráficos por fotograma: aunque se baje muy rápido, la página sigue respondiendo.
+  function pumpMinis() {
+    const until = performance.now() + 12;
+    while (queued.size && performance.now() < until) {
+      let el = null;
+      for (const q of queued) if (onScreen.has(q)) { el = q; break; }
+      el = el || queued.values().next().value;
+      queued.delete(el);
+      createMini(el);
+    }
+    if (queued.size) requestAnimationFrame(pumpMinis); else pumping = false;
+  }
+  function dropMini(el) {
+    const entry = minis.get(el);
+    if (!entry) return;
+    entry.chart.remove();
+    minis.delete(el);
+    el.textContent = "";
+  }
   function renderGrid() {
     for (const entry of minis.values()) entry.chart.remove();
     minis.clear();
-    if (observer) observer.disconnect();
+    near.clear();
+    onScreen.clear();
+    queued.clear();
+    if (observer) { observer.disconnect(); screenObserver.disconnect(); moreCards.disconnect(); }
     const grid = $("grid");
     grid.textContent = "";
+    state.shown = 0;
     if (!state.data) { $("empty").hidden = true; return; }
     const q = state.q.trim().toUpperCase();
     state.view = byMarket(state.items, state.market)
       .filter((it) => passes(it, state.crit, state.minPct))
       .filter((it) => !q || it.simbolo.toUpperCase().includes(q))
       .sort(SORTS[state.sort] || SORTS.rango);
-    state.view.forEach((it, i) => {
-      const el = card(it, i);
-      grid.append(el);
-      const mini = el.querySelector(".mini");
-      if (observer) observer.observe(mini); else createMini(mini);
-    });
+    addCards();
     const empty = $("empty");
     empty.hidden = state.view.length > 0;
     empty.textContent = state.items.length === 0
       ? "Ninguna vela subió un " + MIN_PCT + " % o más en este escaneo."
       : "Ninguna moneda coincide con el filtro.";
+  }
+  // La siguiente tanda de tarjetas (y, con «upTo», al menos hasta esa).
+  function addCards(upTo) {
+    const grid = $("grid");
+    const end = Math.min(state.view.length, Math.max(upTo == null ? 0 : upTo + 1, state.shown + (observer ? GRID_BATCH : Infinity)));
+    if (end <= state.shown) return;
+    const frag = document.createDocumentFragment(), added = [];
+    for (let i = state.shown; i < end; i++) {
+      const el = card(state.view[i], i);
+      frag.append(el);
+      added.push(el.querySelector(".mini"));
+    }
+    grid.append(frag);
+    state.shown = end;
+    if (!observer) { added.forEach(createMini); return; }
+    for (const mini of added) { observer.observe(mini); screenObserver.observe(mini); }
+    moreCards.disconnect();
+    if (end < state.view.length) moreCards.observe(grid.lastElementChild);
   }
   function renderTf() {
     const seg = $("tf");
@@ -771,13 +832,30 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
   // y, al abrir el visor, el resto del historial hacia atrás hasta el listado de la moneda.
   const charts = new Map();  // "mercado:símbolo:tf" -> { rows, at, live, complete, sd }
   const chartKey = (it, tf) => it.mercado + ":" + it.simbolo + ":" + tf;
+  // Solo se guardan las velas de los gráficos usados más recientemente (como mucho CHART_KEEP gráficos y ROWS_KEEP
+  // velas en total): al bajar por cientos de monedas o pasar por muchos historiales completos en el visor, las más
+  // antiguas se olvidan (y se vuelven a pedir si hacen falta). Nunca las del visor ni las que se están descargando.
+  const CHART_KEEP = 100, ROWS_KEEP = 200000;
+  function rememberChart(key, e) {
+    charts.delete(key);
+    charts.set(key, e);
+    let rows = 0;
+    for (const v of charts.values()) rows += v.rows.length;
+    if (charts.size <= CHART_KEEP && rows <= ROWS_KEEP) return;
+    const keep = big ? chartKey(big.item, big.tf) : null;
+    for (const [k, v] of charts) {
+      if (charts.size <= CHART_KEEP && rows <= ROWS_KEEP) break;
+      if (k !== key && k !== keep && !pendingCandles.has(k)) { charts.delete(k); rows -= v.rows.length; }
+    }
+  }
   function chartEntry(it, tf) {
     const key = chartKey(it, tf);
     let e = charts.get(key);
     if (!e) {
       const rows = (it.graficos || {})[tf];  // velas que trae un informe: solo se usan sin conexión
-      if (Array.isArray(rows) && rows.length) charts.set(key, (e = { rows, at: 0, live: false, complete: false, sd: {} }));
+      if (Array.isArray(rows) && rows.length) e = { rows, at: 0, live: false, complete: false, sd: {} };
     }
+    if (e) rememberChart(key, e);
     return e || null;
   }
   // Añade velas: por delante (páginas antiguas), por detrás (las más recientes) o mezcladas por hora de apertura.
@@ -853,16 +931,29 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
   }
   // Rango inicial: la explosión (o la última vela) a la derecha, con algo de margen para ver lo que pasó después.
   // Sin explosión y con poco historial (una moneda recién listada), se ve entero.
+  const barsAfter = (tf, isBig) => (tf === "1d" ? (isBig ? 12 : 3) : Math.round((isBig ? 2 : 1) * DAY / TF_MS[tf]));
   function focusRange(sd, tf, isBig) {
     const n = sd.candles.length;
     if (isBig && sd.exp < 0 && n <= 300) return { from: 0, to: n - 1 + 6 };
-    const after = tf === "1d" ? (isBig ? 12 : 3) : Math.round((isBig ? 2 : 1) * DAY / TF_MS[tf]);
-    const end = Math.min(n - 1, sd.focus + after);
+    const end = Math.min(n - 1, sd.focus + barsAfter(tf, isBig));
     const visible = isBig ? 150 : SIZES[state.size];
     return { from: Math.max(0, end - visible + 1), to: end + (isBig ? 6 : 2) };
   }
+  // Un mini-gráfico no se mueve: le bastan las velas que enseña con el tamaño más grande (así cambiar de tamaño
+  // no obliga a redibujarlo), en vez de todo el historial. Las medias ya vienen calculadas con todas las velas.
+  function miniData(sd, tf) {
+    if (sd.mini) return sd.mini;
+    const n = sd.candles.length;
+    const end = Math.min(n - 1, sd.focus + barsAfter(tf, false));
+    const from = Math.max(0, end - SIZES.l - 8), last = Math.min(n - 1, end + 2);
+    const t0 = sd.candles[from].time, t1 = sd.candles[last].time;
+    const shift = (i) => (i >= from && i <= last ? i - from : -1);
+    return (sd.mini = { candles: sd.candles.slice(from, last + 1), mas: sd.mas.map((s) => s.filter((p) => p.time >= t0 && p.time <= t1)),
+      exp: shift(sd.exp), ana: shift(sd.ana), lst: shift(sd.lst), focus: shift(sd.focus) });
+  }
   function buildChart(el, it, isBig, tf, cut) {
-    const sd = seriesData(it, tf, cut);
+    const full = seriesData(it, tf, cut);
+    const sd = full && !isBig ? miniData(full, tf) : full;
     if (!window.LightweightCharts || !sd) {
       el.append(h("div", { class: "placeholder", text: window.LightweightCharts
         ? (cut ? "No hay velas de " + tfLabel(tf) + " antes de la explosión" : "Sin velas de " + tfLabel(tf) + " para esta moneda")
@@ -895,14 +986,17 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
     if (!it || minis.has(el)) return;
     const tf = state.tf;
     const draw = () => {
-      if (!el.isConnected || minis.has(el) || state.tf !== tf) return;
+      if (!el.isConnected || minis.has(el) || state.tf !== tf || (observer && !near.has(el))) return;
       el.textContent = "";
       const entry = buildChart(el, it, false, tf, false);
       if (entry) minis.set(el, entry);
+      // Solo si cambia (al llegar las velas): reemplazarla obliga a recolocar toda la cuadrícula.
       const legend = el.parentElement && el.parentElement.querySelector(".ma-legend");
-      if (legend) legend.replaceWith(maLegend(it, null, tf, false));
+      const fresh = legend && maLegend(it, null, tf, false);
+      if (fresh && fresh.textContent !== legend.textContent) legend.replaceWith(fresh);
     };
     if (isFresh(it, tf)) { draw(); return; }
+    el.textContent = "";
     el.append(h("div", { class: "placeholder", text: "Cargando velas de " + tfLabel(tf) + "…" }));
     loadCandles(it, tf).then(draw);
   }
@@ -1061,7 +1155,8 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
       Object.assign(state, state.trackSaved);
       state.trackSaved = null;
     }
-    const target = lastFocus && document.contains(lastFocus) ? lastFocus : $("grid").children[state.current];
+    let target = lastFocus && document.contains(lastFocus) ? lastFocus : null;
+    if (!target && state.current < state.view.length) { addCards(state.current); target = $("grid").children[state.current]; }
     if (target) target.focus({ preventScroll: false });
   }
   function setCut(cut) {
@@ -1144,6 +1239,25 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
   }
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const hostOf = (url) => url.replace(/^https?:\/\//, "");
+  // Petición con tiempo límite (también para leer la respuesta): una conexión que se queda colgada no deja el
+  // escaneo esperando para siempre; cuenta como un fallo de conexión y se reintenta.
+  const REQUEST_MS = 20000;
+  async function fetchJSON(url, signal) {
+    const ctl = new AbortController(), stop = () => ctl.abort();
+    const timer = setTimeout(stop, REQUEST_MS);
+    signal.addEventListener("abort", stop);
+    try {
+      const resp = await fetch(url, { signal: ctl.signal, cache: "no-store" });
+      let data;
+      if (resp.ok) {
+        try { data = await resp.json(); } catch (err) { if (ctl.signal.aborted) throw err; }
+      }
+      return { resp, data };
+    } finally {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", stop);
+    }
+  }
   class BinanceApi {
     constructor(cfg, signal) { this.cfg = cfg; this.signal = signal; this.base = null; this.minute = 0; this.used = 0; this.budget = cfg.limit * 0.8; }
     async reserve(weight) {  // reparte el peso por minuto que permite Binance
@@ -1163,20 +1277,21 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
         for (let attempt = 0; attempt < 4; attempt++) {
           if (this.signal.aborted) throw new ScanError("Escaneo detenido.", true);
           await this.reserve(weight);
-          let resp;
+          let resp, data;
           try {
-            resp = await fetch(base + path + qs, { signal: this.signal, cache: "no-store" });
+            ({ resp, data } = await fetchJSON(base + path + qs, this.signal));
           } catch (err) {
             if (this.signal.aborted) throw new ScanError("Escaneo detenido.", true);
-            lastError = new ScanError("El navegador no pudo conectar con " + hostOf(base) +
-              " (sin conexión, bloqueo del navegador o página abierta dentro de una app que no permite conexiones externas).", true);
+            // Sin respuesta a tiempo: falla solo este par. Sin conexión: falla todo el mercado.
+            lastError = err && err.name === "AbortError"
+              ? new ScanError(hostOf(base) + " no respondió en " + REQUEST_MS / 1000 + " s.")
+              : new ScanError("El navegador no pudo conectar con " + hostOf(base) +
+                " (sin conexión, bloqueo del navegador o página abierta dentro de una app que no permite conexiones externas).", true);
             if (!this.base) break;  // todavía probando direcciones: pasa a la siguiente
             await sleep(1000 * 2 ** attempt);
             continue;
           }
           if (resp.ok) {
-            let data;
-            try { data = await resp.json(); } catch (err) { data = undefined; }
             if (data !== undefined && (!ok || ok(data))) { this.base = base; return data; }
             lastError = new ScanError(hostOf(base) + " no devolvió datos de la API.", true);
             break;
@@ -1241,7 +1356,7 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
         if (!e || !e.live || Date.now() - e.at >= CHART_TTL) {
           const page = await fetchPage(it, tf, {});
           if (!page.length) return !!chartEntry(it, tf);
-          if (!e || !e.live) charts.set(key, (e = { rows: [], at: 0, live: true, complete: false, sd: {} }));
+          if (!e || !e.live) rememberChart(key, (e = { rows: [], at: 0, live: true, complete: false, sd: {} }));
           addRows(e, page);
           e.at = Date.now();
           if (page.length < PAGE) e.complete = true;  // todo el historial cabe en una página
@@ -1545,43 +1660,46 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
     }
     throw new GhError(409, "otro dispositivo estaba guardando a la vez");
   }
+  // Una sola subida a la vez: la que llega mientras otra sube, espera a que termine y sube lo que quede.
   let syncing = null;
   function syncPending() {
     const cfg = ghConfig();
     if (!cfg) return Promise.resolve(false);
     if (syncing) return syncing.then(() => syncPending());
-    syncing = (async () => {
-      const pending = Object.values(localDays()).filter((d) => d.pendiente);
-      if (!pending.length) return true;
-      track.busy = true;
-      track.sync = "Subiendo a GitHub…";
-      track.syncError = "";
-      renderSync();
-      try {
-        for (const day of pending) {
-          const merged = await pushDay(cfg, day);
-          const days = localDays();
-          const now = days[day.fecha];
-          if (now) {
-            // Si mientras tanto se escaneó otra vez ese día, queda pendiente para la próxima subida.
-            const changed = now.monedas.length !== day.monedas.length;
-            days[day.fecha] = Object.assign(mergeDay(merged, now), { pendiente: changed });
-            saveLocalDays(days);
-          }
-        }
-        track.sync = "Subido a las " + fmtTime(Date.now()) + ".";
-        return true;
-      } catch (err) {
-        track.syncError = err.message;
-        return false;
-      } finally {
-        syncing = null;
-        track.busy = false;
-        renderSync();
-        if (!$("view-track").hidden) renderTracking();
-      }
-    })();
+    // .finally() siempre corre después de esta asignación (aunque no haya nada que subir): si «syncing» se quedara
+    // puesto, cada llamada volvería a esperarse a sí misma sin fin y la página dejaría de responder.
+    syncing = uploadPending(cfg).finally(() => { syncing = null; });
     return syncing;
+  }
+  async function uploadPending(cfg) {
+    const pending = Object.values(localDays()).filter((d) => d.pendiente);
+    if (!pending.length) return true;
+    track.busy = true;
+    track.sync = "Subiendo a GitHub…";
+    track.syncError = "";
+    renderSync();
+    try {
+      for (const day of pending) {
+        const merged = await pushDay(cfg, day);
+        const days = localDays();
+        const now = days[day.fecha];
+        if (now) {
+          // Si mientras tanto se escaneó otra vez ese día, queda pendiente para la próxima subida.
+          const changed = now.monedas.length !== day.monedas.length;
+          days[day.fecha] = Object.assign(mergeDay(merged, now), { pendiente: changed });
+          saveLocalDays(days);
+        }
+      }
+      track.sync = "Subido a las " + fmtTime(Date.now()) + ".";
+      return true;
+    } catch (err) {
+      track.syncError = err.message;
+      return false;
+    } finally {
+      track.busy = false;
+      renderSync();
+      if (!$("view-track").hidden) renderTracking();
+    }
   }
   async function deleteDay(fecha) {
     const cfg = ghConfig();
@@ -1747,7 +1865,7 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
     return { price, t, pct: c.close ? (price - c.close) / c.close * 100 : null };
   }
   function afterPct(c, kind) { const x = afterExtreme(c, kind); return x ? x.pct : null; }
-  const utcDateTime = (ms) => new Date(ms).toLocaleString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "UTC" }) + " UTC";
+  const utcDateTime = (ms) => FMT_DATE_TIME.format(new Date(ms)) + " UTC";
   function fillRange(td, c, kind) {
     if (!td) return;
     const r = ranges[rangeKey(c)], x = afterExtreme(c, kind);
@@ -2112,7 +2230,6 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
     const [y, m] = key.split("-").map(Number);
     return MONTHS[m - 1].charAt(0).toUpperCase() + MONTHS[m - 1].slice(1) + " " + y;
   }
-  const fmtListed = (ms) => lima(ms).toLocaleString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "UTC" });
   // Días del seguimiento en que cada moneda tuvo una explosión, del más reciente al más antiguo.
   function explosionsByCoin() {
     const idx = new Map();
@@ -2157,7 +2274,7 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
         h("td", { class: "c-coin" }, h("span", { class: "coin" }, c.base || c.simbolo, h("small", { text: c.quote ? "/" + c.quote : "" })),
           h("span", { class: "badge", text: MARKET_NAMES[c.mercado] || c.mercado }),
           off ? h("span", { class: "badge off", text: "No cotiza", title: "Estado en Binance: " + c.estado }) : null),
-        h("td", { class: "c-date", "data-label": "Listada" }, fmtListed(c.listado)),
+        h("td", { class: "c-date", "data-label": "Listada" }, fmtDateTime(c.listado)),
         h("td", { class: "r num c-first", "data-label": "Inicial", text: c.precio_inicial == null ? "—" : fmtPrice(c.precio_inicial) }),
         h("td", { class: "r num c-now", "data-label": "Ahora", text: c.ahora == null ? "—" : fmtPrice(c.ahora) }),
         h("td", { class: "r num c-since " + (c.desde == null ? "" : c.desde >= 0 ? "up" : "down") }, c.desde == null ? "—" : fmtPct(c.desde), changeBar(c.desde)),
@@ -2251,7 +2368,7 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
     const ex = explosionsByCoin().get(coinKey(it)) || [];
     const off = it.estado && it.estado !== "TRADING";
     return [
-      h("span", { class: "tf-tag ana", text: "Listada " + fmtListed(it.listado), title: "Fecha y hora de listado en " + ZONA.nombre }),
+      h("span", { class: "tf-tag ana", text: "Listada " + fmtDateTime(it.listado), title: "Fecha y hora de listado en " + ZONA.nombre }),
       off ? h("span", { class: "tf-tag hot", text: "No cotiza (" + it.estado + ")" }) : null,
       it.ahora == null ? null : h("span", null, "Ahora ", h("b", { text: fmtPrice(it.ahora) })),
       ex.length ? h("span", null, "Explosiones ", h("b", { text: String(ex.length) }), " · última " + shortDate(ex[0].fecha) + " ",
