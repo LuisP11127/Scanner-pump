@@ -448,6 +448,7 @@
   "futures:PORTALUSDT": {"base":"PORTAL","listado":1709218800000},
   "futures:POWERUSDT": {"base":"POWER","listado":1765011600000},
   "futures:POWRUSDT": {"base":"POWR","listado":1698373800000},
+  "futures:PREDICTUSDT": {"base":"PREDICT","listado":1792916100000,"precio_inicial":1.62},
   "futures:PRLUSDT": {"base":"PRL","listado":1775039400000,"precio_inicial":0.1937},
   "futures:PROMPTUSDT": {"base":"PROMPT","listado":1744353000000},
   "futures:PROMUSDT": {"base":"PROM","listado":1736944200000},
