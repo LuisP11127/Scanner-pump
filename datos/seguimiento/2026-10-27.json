@@ -440,7 +440,7 @@
    "high": 0.00916,
    "low": 0.006766,
    "close": 0.007749,
-   "volumen": 115873496.0,
+   "volumen": 115873496,
    "pct_rango": 35.3828,
    "pct_cuerpo": -1.65,
    "analisis": {
@@ -1348,7 +1348,7 @@
     "high": 0.3849,
     "low": 0.3343,
     "close": 0.3462,
-    "volumen": 2561146.0,
+    "volumen": 2561146,
     "pct_rango": 15.1361,
     "pct_cuerpo": 1.0803
    }
@@ -1440,7 +1440,7 @@
    "high": 0.005435,
    "low": 0.004713,
    "close": 0.004835,
-   "volumen": 8133753.0,
+   "volumen": 8133753,
    "pct_rango": 15.3193,
    "pct_cuerpo": -0.8205,
    "analisis": {
@@ -1536,18 +1536,18 @@
    "fecha": "2026-10-27",
    "fecha_analisis": "2026-10-26",
    "apertura": 1793145600000,
-   "open": 4.6e-06,
-   "high": 5.23e-06,
-   "low": 4.56e-06,
-   "close": 5.03e-06,
+   "open": 0.0000046,
+   "high": 0.00000523,
+   "low": 0.00000456,
+   "close": 0.00000503,
    "volumen": 112230466.89,
    "pct_rango": 14.693,
    "pct_cuerpo": 9.3478,
    "analisis": {
-    "open": 4.32e-06,
-    "high": 4.62e-06,
-    "low": 4.26e-06,
-    "close": 4.6e-06,
+    "open": 0.00000432,
+    "high": 0.00000462,
+    "low": 0.00000426,
+    "close": 0.0000046,
     "volumen": 28841820.37,
     "pct_rango": 8.4507,
     "pct_cuerpo": 6.4815
@@ -2298,7 +2298,7 @@
     "high": 0.004378,
     "low": 0.004092,
     "close": 0.00436,
-    "volumen": 19654690.0,
+    "volumen": 19654690,
     "pct_rango": 6.9892,
     "pct_cuerpo": 1.7266
    }
@@ -2742,7 +2742,7 @@
    "close": 8.71,
    "volumen": 1118474.12,
    "pct_rango": 10.5839,
-   "pct_cuerpo": 0.0,
+   "pct_cuerpo": 0,
    "analisis": {
     "open": 8.06,
     "high": 8.74,
