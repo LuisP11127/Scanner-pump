@@ -98,7 +98,7 @@
     "high": 0.00916,
     "low": 0.006766,
     "close": 0.007749,
-    "volumen": 115873496.0,
+    "volumen": 115873496,
     "pct_rango": 35.3828,
     "pct_cuerpo": -1.65
    }
@@ -598,7 +598,7 @@
     "high": 0.01638,
     "low": 0.01494,
     "close": 0.01527,
-    "volumen": 2584055.0,
+    "volumen": 2584055,
     "pct_rango": 9.6386,
     "pct_cuerpo": -4.5028
    }
@@ -736,18 +736,18 @@
    "fecha": "2026-10-28",
    "fecha_analisis": "2026-10-27",
    "apertura": 1793232000000,
-   "open": 5.02e-06,
-   "high": 5.68e-06,
-   "low": 4.4e-06,
-   "close": 4.56e-06,
+   "open": 0.00000502,
+   "high": 0.00000568,
+   "low": 0.0000044,
+   "close": 0.00000456,
    "volumen": 227798269.31,
    "pct_rango": 29.0909,
    "pct_cuerpo": -9.1633,
    "analisis": {
-    "open": 4.6e-06,
-    "high": 5.23e-06,
-    "low": 4.56e-06,
-    "close": 5.03e-06,
+    "open": 0.0000046,
+    "high": 0.00000523,
+    "low": 0.00000456,
+    "close": 0.00000503,
     "volumen": 112230466.89,
     "pct_rango": 14.693,
     "pct_cuerpo": 9.3478
@@ -1190,7 +1190,7 @@
    "high": 0.0612,
    "low": 0.0488,
    "close": 0.0505,
-   "volumen": 795513.57,
+   "volumen": 795513.58,
    "pct_rango": 25.4098,
    "pct_cuerpo": -12.3264,
    "analisis": {
@@ -1515,7 +1515,7 @@
    "high": 0.005802,
    "low": 0.004702,
    "close": 0.00498,
-   "volumen": 3808099.0,
+   "volumen": 3808099,
    "pct_rango": 23.3943,
    "pct_cuerpo": -12.5088,
    "analisis": {
@@ -1723,7 +1723,7 @@
     "high": 2.246,
     "low": 2.156,
     "close": 2.194,
-    "volumen": 877860.0,
+    "volumen": 877860,
     "pct_rango": 4.1744,
     "pct_cuerpo": -0.7689
    }
@@ -3511,18 +3511,18 @@
    "fecha": "2026-10-28",
    "fecha_analisis": "2026-10-27",
    "apertura": 1793232000000,
-   "open": 3.17e-06,
-   "high": 3.26e-06,
-   "low": 2.78e-06,
-   "close": 2.79e-06,
+   "open": 0.00000317,
+   "high": 0.00000326,
+   "low": 0.00000278,
+   "close": 0.00000279,
    "volumen": 4732471.97,
    "pct_rango": 17.2662,
    "pct_cuerpo": -11.9874,
    "analisis": {
-    "open": 3.07e-06,
-    "high": 3.25e-06,
-    "low": 3.02e-06,
-    "close": 3.16e-06,
+    "open": 0.00000307,
+    "high": 0.00000325,
+    "low": 0.00000302,
+    "close": 0.00000316,
     "volumen": 2614337.77,
     "pct_rango": 7.6159,
     "pct_cuerpo": 2.9316
@@ -3836,18 +3836,18 @@
    "fecha": "2026-10-28",
    "fecha_analisis": "2026-10-27",
    "apertura": 1793232000000,
-   "open": 6.867e-05,
-   "high": 7.143e-05,
-   "low": 6.112e-05,
-   "close": 6.251e-05,
+   "open": 0.00006867,
+   "high": 0.00007143,
+   "low": 0.00006112,
+   "close": 0.00006251,
    "volumen": 8845686.48,
    "pct_rango": 16.8685,
    "pct_cuerpo": -8.9704,
    "analisis": {
-    "open": 6.82e-05,
-    "high": 6.982e-05,
-    "low": 6.685e-05,
-    "close": 6.867e-05,
+    "open": 0.0000682,
+    "high": 0.00006982,
+    "low": 0.00006685,
+    "close": 0.00006867,
     "volumen": 4327555.07,
     "pct_rango": 4.4428,
     "pct_cuerpo": 0.6891
@@ -4048,7 +4048,7 @@
     "high": 0.17858,
     "low": 0.16313,
     "close": 0.17208,
-    "volumen": 75049670.0,
+    "volumen": 75049670,
     "pct_rango": 9.471,
     "pct_cuerpo": 2.8326
    }
@@ -4237,7 +4237,7 @@
    "fecha_analisis": "2026-10-27",
    "apertura": 1793232000000,
    "open": 134.07,
-   "high": 138.0,
+   "high": 138,
    "low": 118.43,
    "close": 119.35,
    "volumen": 33264652.75,
@@ -4586,18 +4586,18 @@
    "fecha": "2026-10-28",
    "fecha_analisis": "2026-10-27",
    "apertura": 1793232000000,
-   "open": 1.017e-05,
-   "high": 1.033e-05,
-   "low": 8.88e-06,
-   "close": 9.3e-06,
+   "open": 0.00001017,
+   "high": 0.00001033,
+   "low": 0.00000888,
+   "close": 0.0000093,
    "volumen": 3670331.91,
    "pct_rango": 16.3288,
    "pct_cuerpo": -8.5546,
    "analisis": {
-    "open": 1.017e-05,
-    "high": 1.034e-05,
-    "low": 1e-05,
-    "close": 1.018e-05,
+    "open": 0.00001017,
+    "high": 0.00001034,
+    "low": 0.00001,
+    "close": 0.00001018,
     "volumen": 1147632.6,
     "pct_rango": 3.4,
     "pct_cuerpo": 0.0983
@@ -4761,18 +4761,18 @@
    "fecha": "2026-10-28",
    "fecha_analisis": "2026-10-27",
    "apertura": 1793232000000,
-   "open": 6.876e-05,
-   "high": 7.146e-05,
-   "low": 6.155e-05,
-   "close": 6.262e-05,
+   "open": 0.00006876,
+   "high": 0.00007146,
+   "low": 0.00006155,
+   "close": 0.00006262,
    "volumen": 1204318.05,
    "pct_rango": 16.1007,
    "pct_cuerpo": -8.9296,
    "analisis": {
-    "open": 6.82e-05,
-    "high": 6.986e-05,
-    "low": 6.692e-05,
-    "close": 6.872e-05,
+    "open": 0.0000682,
+    "high": 0.00006986,
+    "low": 0.00006692,
+    "close": 0.00006872,
     "volumen": 551847.46,
     "pct_rango": 4.3933,
     "pct_cuerpo": 0.7625
@@ -5113,8 +5113,8 @@
    "apertura": 1793232000000,
    "open": 1311.08,
    "high": 1398.14,
-   "low": 1207.0,
-   "close": 1223.0,
+   "low": 1207,
+   "close": 1223,
    "volumen": 293303132.79,
    "pct_rango": 15.836,
    "pct_cuerpo": -6.7181,
@@ -5561,18 +5561,18 @@
    "fecha": "2026-10-28",
    "fecha_analisis": "2026-10-27",
    "apertura": 1793232000000,
-   "open": 1.017e-05,
-   "high": 1.033e-05,
-   "low": 8.94e-06,
-   "close": 9.3e-06,
+   "open": 0.00001017,
+   "high": 0.00001033,
+   "low": 0.00000894,
+   "close": 0.0000093,
    "volumen": 663349.97,
    "pct_rango": 15.5481,
    "pct_cuerpo": -8.5546,
    "analisis": {
-    "open": 1.017e-05,
-    "high": 1.033e-05,
-    "low": 1.001e-05,
-    "close": 1.018e-05,
+    "open": 0.00001017,
+    "high": 0.00001033,
+    "low": 0.00001001,
+    "close": 0.00001018,
     "volumen": 140399.58,
     "pct_rango": 3.1968,
     "pct_cuerpo": 0.0983
@@ -5725,7 +5725,7 @@
     "close": 1.628,
     "volumen": 3004209.55,
     "pct_rango": 3.0721,
-    "pct_cuerpo": 0.0
+    "pct_cuerpo": 0
    }
   },
   {
@@ -6200,7 +6200,7 @@
     "close": 0.02142,
     "volumen": 385862.34,
     "pct_rango": 3.9461,
-    "pct_cuerpo": 2.0
+    "pct_cuerpo": 2
    }
   },
   {
@@ -7061,18 +7061,18 @@
    "fecha": "2026-10-28",
    "fecha_analisis": "2026-10-27",
    "apertura": 1793232000000,
-   "open": 3.595e-05,
-   "high": 3.605e-05,
-   "low": 3.146e-05,
-   "close": 3.156e-05,
+   "open": 0.00003595,
+   "high": 0.00003605,
+   "low": 0.00003146,
+   "close": 0.00003156,
    "volumen": 2151718.22,
    "pct_rango": 14.59,
    "pct_cuerpo": -12.2114,
    "analisis": {
-    "open": 3.596e-05,
-    "high": 3.67e-05,
-    "low": 3.496e-05,
-    "close": 3.593e-05,
+    "open": 0.00003596,
+    "high": 0.0000367,
+    "low": 0.00003496,
+    "close": 0.00003593,
     "volumen": 1086329.8,
     "pct_rango": 4.9771,
     "pct_cuerpo": -0.0834
@@ -7486,18 +7486,18 @@
    "fecha": "2026-10-28",
    "fecha_analisis": "2026-10-27",
    "apertura": 1793232000000,
-   "open": 2.402e-05,
-   "high": 2.515e-05,
-   "low": 2.2e-05,
-   "close": 2.239e-05,
+   "open": 0.00002402,
+   "high": 0.00002515,
+   "low": 0.000022,
+   "close": 0.00002239,
    "volumen": 3164101.07,
    "pct_rango": 14.3182,
    "pct_cuerpo": -6.786,
    "analisis": {
-    "open": 2.325e-05,
-    "high": 2.452e-05,
-    "low": 2.318e-05,
-    "close": 2.403e-05,
+    "open": 0.00002325,
+    "high": 0.00002452,
+    "low": 0.00002318,
+    "close": 0.00002403,
     "volumen": 2099578.18,
     "pct_rango": 5.7808,
     "pct_cuerpo": 3.3548
@@ -7586,18 +7586,18 @@
    "fecha": "2026-10-28",
    "fecha_analisis": "2026-10-27",
    "apertura": 1793232000000,
-   "open": 3.602e-05,
-   "high": 3.608e-05,
-   "low": 3.157e-05,
-   "close": 3.161e-05,
+   "open": 0.00003602,
+   "high": 0.00003608,
+   "low": 0.00003157,
+   "close": 0.00003161,
    "volumen": 415547.29,
    "pct_rango": 14.2857,
    "pct_cuerpo": -12.2432,
    "analisis": {
-    "open": 3.603e-05,
-    "high": 3.674e-05,
-    "low": 3.5e-05,
-    "close": 3.596e-05,
+    "open": 0.00003603,
+    "high": 0.00003674,
+    "low": 0.000035,
+    "close": 0.00003596,
     "volumen": 273068.55,
     "pct_rango": 4.9714,
     "pct_cuerpo": -0.1943
@@ -8075,7 +8075,7 @@
     "close": 1.628,
     "volumen": 807774.4,
     "pct_rango": 3.0075,
-    "pct_cuerpo": 0.0
+    "pct_cuerpo": 0
    }
   },
   {
@@ -8265,7 +8265,7 @@
    "high": 0.431,
    "low": 0.378,
    "close": 0.378,
-   "volumen": 679212.0,
+   "volumen": 679212,
    "pct_rango": 14.0212,
    "pct_cuerpo": -8.4746,
    "analisis": {
@@ -8298,7 +8298,7 @@
     "high": 0.3354,
     "low": 0.3129,
     "close": 0.3283,
-    "volumen": 7261608.5,
+    "volumen": 7261608.51,
     "pct_rango": 7.1908,
     "pct_cuerpo": 2.4017
    }
@@ -8498,7 +8498,7 @@
     "high": 0.0602,
     "low": 0.0571,
     "close": 0.0583,
-    "volumen": 648801.0,
+    "volumen": 648801,
     "pct_rango": 5.4291,
     "pct_cuerpo": -2.995
    }
@@ -9625,7 +9625,7 @@
     "close": 0.00682,
     "volumen": 626441.87,
     "pct_rango": 4.6687,
-    "pct_cuerpo": 0.0
+    "pct_cuerpo": 0
    }
   },
   {
@@ -9998,7 +9998,7 @@
     "high": 0.005435,
     "low": 0.004713,
     "close": 0.004835,
-    "volumen": 8133753.0,
+    "volumen": 8133753,
     "pct_rango": 15.3193,
     "pct_cuerpo": -0.8205
    }
@@ -11065,7 +11065,7 @@
    "high": 0.00984,
    "low": 0.00872,
    "close": 0.00873,
-   "volumen": 390126.0,
+   "volumen": 390126,
    "pct_rango": 12.844,
    "pct_cuerpo": -10.7362,
    "analisis": {
@@ -11525,7 +11525,7 @@
     "close": 0.0336,
     "volumen": 804493.08,
     "pct_rango": 7.6453,
-    "pct_cuerpo": 0.0
+    "pct_cuerpo": 0
    }
   },
   {
@@ -11925,7 +11925,7 @@
     "close": 0.0328,
     "volumen": 176694.67,
     "pct_rango": 4.0625,
-    "pct_cuerpo": 0.0
+    "pct_cuerpo": 0
    }
   },
   {
@@ -12100,7 +12100,7 @@
     "close": 0.252,
     "volumen": 151720.75,
     "pct_rango": 2.834,
-    "pct_cuerpo": 0.0
+    "pct_cuerpo": 0
    }
   },
   {
@@ -12394,7 +12394,7 @@
    "pct_rango": 12.2931,
    "pct_cuerpo": -8.5207,
    "analisis": {
-    "open": 31.0,
+    "open": 31,
     "high": 31.93,
     "low": 30.85,
     "close": 31.58,
@@ -12440,7 +12440,7 @@
    "high": 202.19,
    "low": 180.07,
    "close": 182.69,
-   "volumen": 87526885.11,
+   "volumen": 87526885.12,
    "pct_rango": 12.2841,
    "pct_cuerpo": -9.4249,
    "analisis": {
@@ -13066,7 +13066,7 @@
    "low": 0.00035,
    "close": 0.000351,
    "volumen": 344473.85,
-   "pct_rango": 12.0,
+   "pct_rango": 12,
    "pct_cuerpo": -9.5361,
    "analisis": {
     "open": 0.000381,
@@ -13248,7 +13248,7 @@
     "high": 0.04463,
     "low": 0.04256,
     "close": 0.04353,
-    "volumen": 64253.0,
+    "volumen": 64253,
     "pct_rango": 4.8637,
     "pct_cuerpo": -1.2029
    }
@@ -13337,8 +13337,8 @@
    "fecha_analisis": "2026-10-27",
    "apertura": 1793232000000,
    "open": 759.85,
-   "high": 761.0,
-   "low": 680.0,
+   "high": 761,
+   "low": 680,
    "close": 698.46,
    "volumen": 414025566.04,
    "pct_rango": 11.9118,
@@ -13346,7 +13346,7 @@
    "analisis": {
     "open": 744.94,
     "high": 762.2,
-    "low": 742.0,
+    "low": 742,
     "close": 759.85,
     "volumen": 94495576.57,
     "pct_rango": 2.7224,
@@ -13540,7 +13540,7 @@
    "high": 0.2006,
    "low": 0.1794,
    "close": 0.1942,
-   "volumen": 6790842.0,
+   "volumen": 6790842,
    "pct_rango": 11.8172,
    "pct_cuerpo": 3.7393,
    "analisis": {
@@ -13625,7 +13625,7 @@
     "close": 0.000452,
     "volumen": 340132.74,
     "pct_rango": 3.5955,
-    "pct_cuerpo": 0.0
+    "pct_cuerpo": 0
    }
   },
   {
@@ -13923,7 +13923,7 @@
     "high": 0.1433,
     "low": 0.1363,
     "close": 0.1411,
-    "volumen": 148747.0,
+    "volumen": 148747,
     "pct_rango": 5.1357,
     "pct_cuerpo": 1.6571
    }
@@ -14015,7 +14015,7 @@
    "high": 0.0546,
    "low": 0.0489,
    "close": 0.0497,
-   "volumen": 247062.0,
+   "volumen": 247062,
    "pct_rango": 11.6564,
    "pct_cuerpo": -8.1331,
    "analisis": {
@@ -14248,7 +14248,7 @@
     "high": 0.2672,
     "low": 0.2553,
     "close": 0.2616,
-    "volumen": 537153.0,
+    "volumen": 537153,
     "pct_rango": 4.6612,
     "pct_cuerpo": -2.0225
    }
@@ -14725,7 +14725,7 @@
     "close": 0.00502,
     "volumen": 172053.99,
     "pct_rango": 4.6843,
-    "pct_cuerpo": 0.0
+    "pct_cuerpo": 0
    }
   },
   {
@@ -15373,7 +15373,7 @@
     "high": 0.00842,
     "low": 0.00809,
     "close": 0.00829,
-    "volumen": 164777.0,
+    "volumen": 164777,
     "pct_rango": 4.0791,
     "pct_cuerpo": -0.7186
    }
@@ -15411,18 +15411,18 @@
    "fecha": "2026-10-28",
    "fecha_analisis": "2026-10-27",
    "apertura": 1793232000000,
-   "open": 2100.0,
-   "high": 2116.0,
-   "low": 1904.0,
-   "close": 1931.0,
+   "open": 2100,
+   "high": 2116,
+   "low": 1904,
+   "close": 1931,
    "volumen": 3244091.02,
    "pct_rango": 11.1345,
    "pct_cuerpo": -8.0476,
    "analisis": {
-    "open": 2115.0,
-    "high": 2131.0,
-    "low": 2061.0,
-    "close": 2100.0,
+    "open": 2115,
+    "high": 2131,
+    "low": 2061,
+    "close": 2100,
     "volumen": 1424568.21,
     "pct_rango": 3.3964,
     "pct_cuerpo": -0.7092
@@ -15898,7 +15898,7 @@
     "high": 0.06172,
     "low": 0.05992,
     "close": 0.06148,
-    "volumen": 170452.0,
+    "volumen": 170452,
     "pct_rango": 3.004,
     "pct_cuerpo": 0.1629
    }
@@ -15986,18 +15986,18 @@
    "fecha": "2026-10-28",
    "fecha_analisis": "2026-10-27",
    "apertura": 1793232000000,
-   "open": 4.97e-06,
-   "high": 5.1e-06,
-   "low": 4.6e-06,
-   "close": 4.63e-06,
+   "open": 0.00000497,
+   "high": 0.0000051,
+   "low": 0.0000046,
+   "close": 0.00000463,
    "volumen": 6531291.88,
    "pct_rango": 10.8696,
    "pct_cuerpo": -6.841,
    "analisis": {
-    "open": 4.91e-06,
-    "high": 5.05e-06,
-    "low": 4.89e-06,
-    "close": 4.97e-06,
+    "open": 0.00000491,
+    "high": 0.00000505,
+    "low": 0.00000489,
+    "close": 0.00000497,
     "volumen": 3019289.53,
     "pct_rango": 3.272,
     "pct_cuerpo": 1.222
@@ -16075,7 +16075,7 @@
     "close": 0.07452,
     "volumen": 166797.6,
     "pct_rango": 4.7448,
-    "pct_cuerpo": 0.0
+    "pct_cuerpo": 0
    }
   },
   {
@@ -16786,18 +16786,18 @@
    "fecha": "2026-10-28",
    "fecha_analisis": "2026-10-27",
    "apertura": 1793232000000,
-   "open": 2105.0,
-   "high": 2115.0,
-   "low": 1915.0,
-   "close": 1933.0,
+   "open": 2105,
+   "high": 2115,
+   "low": 1915,
+   "close": 1933,
    "volumen": 254268.55,
    "pct_rango": 10.4439,
    "pct_cuerpo": -8.171,
    "analisis": {
-    "open": 2119.0,
-    "high": 2133.0,
-    "low": 2060.0,
-    "close": 2104.0,
+    "open": 2119,
+    "high": 2133,
+    "low": 2060,
+    "close": 2104,
     "volumen": 118296.29,
     "pct_rango": 3.5437,
     "pct_cuerpo": -0.7079
@@ -16850,7 +16850,7 @@
     "close": 0.03081,
     "volumen": 1979800.1,
     "pct_rango": 3.5679,
-    "pct_cuerpo": 0.0
+    "pct_cuerpo": 0
    }
   },
   {
@@ -16986,18 +16986,18 @@
    "fecha": "2026-10-28",
    "fecha_analisis": "2026-10-27",
    "apertura": 1793232000000,
-   "open": 4.553e-05,
-   "high": 4.583e-05,
-   "low": 4.154e-05,
-   "close": 4.266e-05,
+   "open": 0.00004553,
+   "high": 0.00004583,
+   "low": 0.00004154,
+   "close": 0.00004266,
    "volumen": 1615104.91,
    "pct_rango": 10.3274,
    "pct_cuerpo": -6.3035,
    "analisis": {
-    "open": 4.505e-05,
-    "high": 4.6e-05,
-    "low": 4.462e-05,
-    "close": 4.553e-05,
+    "open": 0.00004505,
+    "high": 0.000046,
+    "low": 0.00004462,
+    "close": 0.00004553,
     "volumen": 650531.56,
     "pct_rango": 3.0928,
     "pct_cuerpo": 1.0655
@@ -17098,7 +17098,7 @@
     "high": 0.02851,
     "low": 0.02774,
     "close": 0.02813,
-    "volumen": 85199.0,
+    "volumen": 85199,
     "pct_rango": 2.7758,
     "pct_cuerpo": -0.142
    }
@@ -17625,7 +17625,7 @@
     "close": 8.71,
     "volumen": 1118474.12,
     "pct_rango": 10.5839,
-    "pct_cuerpo": 0.0
+    "pct_cuerpo": 0
    }
   },
   {
