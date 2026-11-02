@@ -468,6 +468,7 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
   const MIN_PCT = 10;
   const PCT_STEPS = [10, 15, 20, 25, 30, 40, 50, 75, 100];
   const MEDIAS = [7, 25, 99];
+  const VOL_MEDIAS = [5, 25];  // medias del volumen sobre sus barras (visor), como en Binance
   const CHART_TFS = ["2h", "4h", "8h", "12h", "1d"];
   const TF_MS = { "2h": 7200000, "4h": 14400000, "8h": 28800000, "12h": 43200000, "1d": DAY };
   const PAGE = 1000;           // velas por petición: el máximo de spot (en futuros, 1000 pesan la mitad que 1500)
@@ -919,6 +920,14 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
     if (sd.exp >= 0) out.push({ time: sd.candles[sd.exp].time, position: "aboveBar", color: t.hot, shape: "arrowDown", text: isBig ? "Explosión" : "" });
     return out;
   }
+  function volMedias(sd) {
+    if (!sd.volMas) {
+      const v = sd.volume.map((x) => x.value);
+      sd.volRaw = VOL_MEDIAS.map((p) => sma(v, p));
+      sd.volMas = sd.volRaw.map((arr) => arr.flatMap((x, i) => (x == null ? [] : [{ time: sd.volume[i].time, value: x }])));
+    }
+    return sd;
+  }
   function applyColors(entry, t) {
     entry.chart.applyOptions(chartOptions(t, entry.isBig));
     entry.candles.applyOptions({ upColor: t.up, downColor: t.down, wickUpColor: t.up, wickDownColor: t.down, borderVisible: false });
@@ -926,6 +935,8 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
     if (entry.volume) {
       const alpha = (c) => c + (c.startsWith("#") && c.length === 7 ? "66" : "");
       entry.volume.setData(entry.sd.volume.map((v) => ({ time: v.time, value: v.value, color: alpha(v.up ? t.up : t.down) })));
+      volMedias(entry.sd);
+      entry.volMas.forEach((s, i) => { s.applyOptions({ color: t.ma[i] }); s.setData(entry.sd.volMas[i]); });
     }
     entry.candles.setMarkers(markersFor(entry.sd, t, entry.isBig));
   }
@@ -971,12 +982,14 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
       s.setData(data);
       return s;
     });
-    let volume = null;
+    let volume = null, volMas = [];
     if (isBig) {
       volume = chart.addHistogramSeries({ priceFormat: { type: "volume" }, priceScaleId: "vol", lastValueVisible: false, priceLineVisible: false });
+      volMas = VOL_MEDIAS.map(() => chart.addLineSeries({ priceScaleId: "vol", priceFormat: { type: "volume" }, lineWidth: 1,
+        lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false }));
       chart.priceScale("vol").applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
     }
-    const entry = { chart, candles, mas, volume, item: it, isBig, tf, sd };
+    const entry = { chart, candles, mas, volume, volMas, item: it, isBig, tf, sd };
     applyColors(entry, t);
     chart.timeScale().setVisibleLogicalRange(focusRange(sd, tf, isBig));
     return entry;
@@ -1022,6 +1035,10 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
       row.append(h("b", { text: "Mín→Máx " }), h("span", { class: "hot", text: fmtPct(pr) }), "  ",
         h("b", { text: "Apert→Cierre " }), h("span", { class: pc >= 0 ? "up" : "down", text: fmtPct(pc) }), "  ");
       $("v-legend").prepend(row);
+      volMedias(sd);
+      const vol = h("span", null, h("b", { text: "Vol " }), fmtVol(sd.volume[idx].value));
+      VOL_MEDIAS.forEach((p, i) => vol.append("  ", h("b", { class: ["c-fast", "c-mid"][i], text: "MA(" + p + ") " }), fmtVol(sd.volRaw[i][idx])));
+      $("v-legend").append(vol);
     }
   }
   function openViewer(index) {

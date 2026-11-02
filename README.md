@@ -57,7 +57,9 @@ completo: 40 161 velas de 2H desde el 16 ago 2017». El botón ⛶ (o la tecla `
     `E`) vuelve a la explosión;
   - **Hasta el análisis** (o `H`) oculta las velas posteriores: el gráfico tal como estaba al cerrar la fecha de
     análisis, para estudiarlo sin ver lo que pasó después;
-  - al pasar el ratón se ven apertura, máximo, mínimo, cierre, las dos subidas y las tres medias de esa vela.
+  - las barras de volumen llevan encima sus medias **MA(5)** y **MA(25)**, como en Binance y Momento-A;
+  - al pasar el ratón se ven apertura, máximo, mínimo, cierre, las dos subidas, las tres medias y el volumen de
+    esa vela con sus dos medias.
 - **Cargar informe** abre un `.html` o `.json` generado por la línea de comandos o por el workflow.
 
 ### Monedas listadas 2026
