@@ -717,7 +717,7 @@
    "close": 0.00151,
    "volumen": 4764591.57,
    "pct_rango": 23.1293,
-   "pct_cuerpo": 0.0,
+   "pct_cuerpo": 0,
    "analisis": {
     "open": 0.00144,
     "high": 0.00157,
@@ -1645,7 +1645,7 @@
    "pct_cuerpo": -8.1098,
    "analisis": {
     "open": 1251.48,
-    "high": 1264.0,
+    "high": 1264,
     "low": 1210.62,
     "close": 1234.56,
     "volumen": 88071498.31,
@@ -2025,7 +2025,7 @@
     "close": 0.37,
     "volumen": 250172.02,
     "pct_rango": 12.0219,
-    "pct_cuerpo": 0.0
+    "pct_cuerpo": 0
    }
   },
   {
