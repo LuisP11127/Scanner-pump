@@ -28,10 +28,10 @@ que el scanner toma **la última vela completa: la del 1 de octubre**. Si esa ve
 **fecha de análisis** es la vela anterior, **30 de septiembre**: el día que conviene estudiar para ver qué
 anunciaba la explosión.
 
-## La web: Escáner, Monedas listadas 2026 y Seguimiento
+## La web: Escáner, Monedas listadas 2026, Seguimiento y Predicción
 
-`python -m scanner_pump.web site` genera la página 🚀 (la publica sola el workflow **Web**). Tiene tres
-pestañas: **Escáner**, **Monedas listadas 2026** y **Seguimiento**. Las peticiones a Binance salen desde tu
+`python -m scanner_pump.web site` genera la página 🚀 (la publica sola el workflow **Web**). Tiene cuatro
+pestañas: **Escáner**, **Monedas listadas 2026**, **Seguimiento** y **Predicción**. Las peticiones a Binance salen desde tu
 navegador, así que no hace falta ningún servidor.
 
 **Gráficos con todo el historial.** Cada gráfico pide a Binance el máximo de velas por petición (1000) y, al
@@ -111,12 +111,39 @@ Entre el 6 y el 7 de octubre de 2026 el escáner exigió que el mínimo de la ve
 queda alguna moneda guardada con esa medida, su Mín→Máx sale con un asterisco y el día muestra **Volver a
 escanear**, que la sustituye por la medida del día completo.
 
+### Predicción
+
+Para cada moneda de un día del seguimiento, busca explosiones pasadas cuyos movimientos **antes del escaneo**
+se parecen y mira cuántas de ellas subieron después. La calcula cada día el workflow **Predicción**
+(`python -m scanner_pump.prediccion`) y la guarda en `datos/prediccion/AAAA-MM-DD.json`.
+
+- **La huella** de una moneda son sus velas de 2H, 4H, 8H y 12H hasta el escaneo (el cierre de la vela de la
+  explosión, 19:00 hora Lima), 84 de cada una (7, 14, 28 y 42 días): la forma del precio, cómo se reparte el
+  volumen, la volatilidad, la tendencia y los **fractales** de 5 velas (techos y suelos: cuántos hay, si van
+  subiendo, la distancia al último y si ya rompió el último techo). Solo cuentan los fractales confirmados antes
+  del escaneo.
+- **La biblioteca:** todas las explosiones (vela diaria de +10 % de mínimo a máximo o de apertura a cierre) desde
+  2023 de los pares que hoy tiene Binance (unas 225 000), con su resultado: si el máximo de los **10 días
+  siguientes** subió **+50 %** sobre el cierre de la vela (el «Máximo después» del seguimiento, con plazo).
+- **Parecidas que subieron:** de las 50 explosiones con la huella más parecida (y cuyo resultado ya se conocía ese
+  día), cuántas subieron +50 %. Cuentan también las que no subieron: una huella frecuente entre las que subieron
+  pero también entre las que no, no puntúa alto. Al lado salen las tres más parecidas y cuánto subieron.
+- **Puntuación:** la mitad por eso y la mitad por el tamaño de la vela, frente a las demás monedas del día. En la
+  prueba desde 2024 las dos juntas acertaron más que cada una por separado.
+- **Mín→Máx / Apertura→Cierre:** cada medida se ordena por separado (por Apertura→Cierre hay días con pocas o
+  ninguna moneda).
+- **¿Acierta?** La pestaña muestra cómo acertó en tus días del seguimiento que ya tienen resultado y en la prueba
+  hacia atrás (mes a mes desde 2024, sin mirar el futuro). Con Mín→Máx, de media llega a +50 % el 9 % de las
+  explosiones; de las 5 mejor puntuadas de cada día, el 23,5 % (eligiendo solo las velas más grandes, el 21,8 %).
+  No es una garantía: la mayoría de las mejor puntuadas no llega a +50 %.
+
 ## GitHub Actions
 
 | Workflow | Cuándo | Qué hace |
 |---|---|---|
 | **Escaneo diario** (`escaneo-diario.yml`) | Cada día a las 00:07 UTC (19:07 hora Lima), justo después del cierre de la vela. También a mano. | Escanea la última vela completa y guarda las explosiones en `datos/seguimiento/`. Actualiza las fechas de listado en `datos/listados.json` (solo los pares nuevos). Deja el informe con los gráficos en **Artifacts → scanner-pump** y la tabla en el resumen. |
-| **Web** (`web.yml`) | Tras cada escaneo diario y cada cambio en `main`. | Publica la web en GitHub Pages con todo el seguimiento (`seguimiento.json`) y las fechas de listado (`listados.json`). |
+| **Predicción** (`prediccion.yml`) | Tras cada escaneo diario. También a mano (se pueden elegir días). | Pone al día las velas de 2H de todos los pares (en la caché de Actions, no en el repositorio; la primera vez descarga desde 2022, hasta unos 35 minutos), puntúa las monedas del último día del seguimiento, guarda `datos/prediccion/` y añade el resultado a 10 días de las predicciones anteriores. Los lunes repite la prueba hacia atrás (`prueba.json`). |
+| **Web** (`web.yml`) | Tras cada escaneo diario, cada predicción y cada cambio en `main`. | Publica la web en GitHub Pages con todo el seguimiento (`seguimiento.json`), las fechas de listado (`listados.json`) y las predicciones (`prediccion/`). |
 | **Tests** (`tests.yml`) | En cada pull request y cambio en `main`. | Pasa los tests y comprueba la huella de la librería de gráficos. |
 
 **Escaneo manual:** **Actions → Escaneo diario → Run workflow**. Puedes dejar la fecha vacía (última vela
