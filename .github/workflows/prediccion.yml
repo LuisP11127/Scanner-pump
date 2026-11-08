@@ -1,0 +1,83 @@
+name: Predicción
+
+# Después de cada «Escaneo diario»: pone al día las velas de 2H de todos los pares (en la caché de Actions; no van
+# al repositorio), reconstruye las explosiones desde 2023 con su resultado a 10 días, puntúa las monedas del último
+# día del seguimiento y guarda datos/prediccion/AAAA-MM-DD.json (y el resultado de las predicciones que ya
+# cumplieron 10 días). Cada lunes repite la prueba hacia atrás (datos/prediccion/prueba.json).
+# La primera vez (o si la caché se borra, tras 7 días sin usarse) descarga todo el historial: hasta unos 35 minutos.
+#
+# También a mano: Actions → Predicción → Run workflow (se pueden elegir días del seguimiento).
+on:
+  workflow_run:
+    workflows: ["Escaneo diario"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      fecha:
+        description: "Días del seguimiento a predecir (AAAA-MM-DD, separados por espacios). Vacío = el último"
+        required: false
+        default: ""
+      probar:
+        description: "Repetir la prueba hacia atrás"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: prediccion
+  cancel-in-progress: false
+
+jobs:
+  predecir:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion != 'cancelled'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      FECHA: ${{ inputs.fecha }}
+      PROBAR: ${{ inputs.probar }}
+      PYTHONUNBUFFERED: "1"
+      PYTHONIOENCODING: utf-8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements.txt
+
+      - uses: actions/cache@v4
+        with:
+          path: cache/velas-2h
+          key: velas-2h-${{ github.run_id }}
+          restore-keys: velas-2h-
+
+      - name: Predecir
+        shell: bash
+        run: |
+          args=()
+          if [ -n "$FECHA" ]; then args+=(--fecha $FECHA); fi
+          if [ "$PROBAR" = "true" ] || [ "$(date -u +%u)" = "1" ]; then args+=(--probar); fi
+          python -m scanner_pump.prediccion "${args[@]}" 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Guardar
+        shell: bash
+        env:
+          BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add datos/prediccion
+          if git diff --cached --quiet; then
+            echo "La predicción ya estaba al día."
+            exit 0
+          fi
+          git commit --quiet -m "Predicción (automática)"
+          for intento in 1 2 3 4 5; do
+            if git push --quiet origin "HEAD:$BRANCH"; then exit 0; fi
+            sleep $((intento * 5))
+            git pull --quiet --rebase origin "$BRANCH"
+          done
+          echo "::error title=Predicción sin guardar::No se pudo subir tras varios intentos."
+          exit 1

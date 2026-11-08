@@ -4,21 +4,27 @@
     python -m scanner_pump.web site --seguimiento datos/seguimiento   # y site/seguimiento.json con todos los días
     python -m scanner_pump.web site --bstocks                         # y site/bstocks.json (acciones tokenizadas)
     python -m scanner_pump.web site --listados datos/listados.json    # y site/listados.json (fechas de listado)
+    python -m scanner_pump.web site --prediccion datos/prediccion     # y site/prediccion/ (pestaña Predicción)
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Sequence
 
 from .binance import SPOT, BinanceClient
 from .listados import read_listings
+from .prediccion import en_vivo
 from .report import render_page
 from .scanner import is_tokenized_stock
 from .seguimiento import collect_days
+
+
+DAY_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 
 def stock_symbols(client: Optional[BinanceClient] = None) -> list[str]:
@@ -33,12 +39,42 @@ def write_json(path: Path, data: dict) -> None:
     path.write_text(json.dumps(data, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
 
 
+def write_predictions(source: Path, dest: Path, generated: str) -> None:
+    """Un archivo por día y un índice con los días, la prueba hacia atrás y cómo acertaron los días ya cerrados."""
+    days = []
+    for path in sorted(source.glob("*.json")):
+        if not DAY_RE.fullmatch(path.stem):
+            continue
+        try:
+            day = json.loads(path.read_text(encoding="utf-8"))
+        except ValueError:
+            continue
+        days.append(day)
+        dest.mkdir(parents=True, exist_ok=True)
+        write_json(dest / path.name, day)
+    if not days:
+        print(f"Aviso: no hay predicciones en {source}.")
+        return
+    try:
+        test = json.loads((source / "prueba.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        test = None
+    index = {"generado": generated, "prueba": test, "en_vivo": en_vivo(days),
+             "dias": [{"fecha": d["fecha"], "monedas": len(d.get("monedas", [])),
+                       "con_resultado": sum(c.get("max_despues") is not None for c in d.get("monedas", []))}
+                      for d in reversed(days)]}
+    write_json(dest / "indice.json", index)
+    print(f"{len(days)} días de predicción en {dest}")
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m scanner_pump.web", description=__doc__.splitlines()[0])
     parser.add_argument("carpeta", nargs="?", default="site", help="carpeta de salida (por defecto: site)")
     parser.add_argument("--seguimiento", metavar="CARPETA",
                         help="unir los archivos de seguimiento de CARPETA en seguimiento.json")
     parser.add_argument("--bstocks", action="store_true", help="escribir también bstocks.json")
+    parser.add_argument("--prediccion", metavar="CARPETA",
+                        help="publicar las predicciones de CARPETA (datos/prediccion) en prediccion/")
     parser.add_argument("--listados", metavar="ARCHIVO",
                         help="publicar las fechas de listado de ARCHIVO (datos/listados.json) como listados.json")
     args = parser.parse_args(argv)
@@ -59,6 +95,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             print(f"{len(pares)} fechas de listado en {out / 'listados.json'}")
         else:
             print(f"Aviso: {args.listados} no existe o está vacío; la web buscará las fechas de listado en Binance.")
+    if args.prediccion:
+        write_predictions(Path(args.prediccion), out / "prediccion", generated)
     if args.bstocks:
         try:
             symbols = stock_symbols()

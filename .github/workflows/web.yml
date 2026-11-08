@@ -2,14 +2,14 @@ name: Web
 
 # Publica la web (GitHub Pages) con el seguimiento al día: une datos/seguimiento/*.json en seguimiento.json,
 # publica las fechas de listado (datos/listados.json → listados.json) y añade la lista de acciones
-# tokenizadas de Binance (bstocks.json) para descartarlas del escáner.
-# Se ejecuta en cada cambio en main (incluidos los guardados que hace la web con la clave de GitHub) y
-# después de cada «Escaneo diario». Solo despliega si GitHub Pages está activado con «Source: GitHub Actions».
+# tokenizadas de Binance (bstocks.json) para descartarlas del escáner, y las predicciones (datos/prediccion →
+# prediccion/). Se ejecuta en cada cambio en main (incluidos los guardados que hace la web con la clave de
+# GitHub) y después de cada «Escaneo diario» y cada «Predicción». Solo despliega si GitHub Pages está activado con «Source: GitHub Actions».
 on:
   push:
     branches: [main]
   workflow_run:
-    workflows: ["Escaneo diario"]
+    workflows: ["Escaneo diario", "Predicción"]
     types: [completed]
   workflow_dispatch:
 
@@ -56,7 +56,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -r requirements.txt
-      - run: python -m scanner_pump.web site --bstocks --seguimiento datos/seguimiento --listados datos/listados.json
+      - run: python -m scanner_pump.web site --bstocks --seguimiento datos/seguimiento --listados datos/listados.json --prediccion datos/prediccion
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
