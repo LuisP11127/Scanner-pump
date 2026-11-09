@@ -54,15 +54,16 @@ def test_huella_solo_con_velas_anteriores_al_escaneo():
     assert P.huella(t, v, T0 + 10 * DIA) is None
 
 
-def test_explosiones_y_resultado_a_10_dias():
+def test_vela_de_analisis_y_lo_que_paso_despues():
     t, v = serie(40, explota=20, sube=0.4)
-    ex = {e["apertura"]: e for e in P.explosiones(t, v)}
-    e = ex[T0 + 20 * DIA]
-    assert e["escaneo"] == T0 + 21 * DIA and e["pct_rango"] >= 25
-    assert e["max_despues"] > 35  # el máximo de los 10 días siguientes frente al cierre de la vela
-    # Sin los 10 días cerrados, sin resultado
-    corto = t < T0 + 25 * DIA
-    assert P.explosiones(t[corto], v[corto])[-1]["max_despues"] is None
+    a = P.vela_analisis(t, v, T0 + 20 * DIA)  # la vela del día 19 cierra cuando abre la explosión
+    assert a["apertura"] == T0 + 19 * DIA and a["pct_rango"] < 10
+    assert a["manana"] >= 25  # la vela siguiente es la explosión
+    assert a["max_despues"] > 60  # máximo de los 10 días siguientes frente al cierre
+    corto = t < T0 + 25 * DIA  # sin los 10 días cerrados, sin máximo; la vela siguiente sí
+    b = P.vela_analisis(t[corto], v[corto], T0 + 20 * DIA)
+    assert b["max_despues"] is None and b["manana"] == a["manana"]
+    assert P.vela_analisis(t, v, T0 + 60 * DIA) is None  # el par no cotizaba
 
 
 def test_biblioteca_puntua_por_las_vecinas():
@@ -71,70 +72,74 @@ def test_biblioteca_puntua_por_las_vecinas():
     llego = np.r_[np.zeros(200), np.ones(200)]
     p, idx = P.Biblioteca(x, llego).puntuar(np.array([[5, 5, 5, 5], [0, 0, 0, 0]], np.float32), k=20)
     assert p[0] > 0.9 and p[1] < 0.1 and idx.shape == (2, 20)
+    # Las que no subieron pesan más (en la biblioteca solo está 1 de cada 4)
+    mitad = np.vstack([np.zeros((2, 4)), np.zeros((2, 4))]).astype(np.float32)
+    p, _ = P.Biblioteca(mitad, np.array([1, 1, 0, 0]), np.array([1.0, 1.0, 4.0, 4.0])).puntuar(np.zeros((1, 4), np.float32), k=4)
+    assert np.isclose(p[0], 0.2)
 
 
-def test_combinar_da_la_mitad_a_cada_cosa():
-    s = P.combinar(np.array([0.1, 0.3, 0.2]), np.array([50.0, 10.0, 30.0]))
-    assert np.allclose(s, [0.5, 0.5, 0.5])
-    assert np.allclose(P.combinar(np.array([0.1, 0.3]), np.array([10.0, 50.0])), [0, 1])
-
-
-def test_predecir_dia_resultados_y_web(tmp_path, monkeypatch):
-    monkeypatch.setattr(P, "VECINAS", 3)  # la biblioteca de prueba solo tiene unas pocas explosiones
+def _cache(tmp_path):
     cache = tmp_path / "cache"
-    for i, simbolo in enumerate(["AUSDT", "BUSDT", "CUSDT"]):
-        t, v = serie(140, explota=100 + i, sube=0.6 if i == 0 else 0.0, semilla=i)
-        (cache / "futures").mkdir(parents=True, exist_ok=True)
-        np.savez_compressed(cache / "futures" / f"{simbolo}.npz", t=t, ohlcv=v.astype(np.float32))
-    filas, x = P.construir_biblioteca(cache)
-    assert len(filas) == len(x) and all(f["max_despues"] is not None for f in filas)
-    apertura = T0 + 120 * DIA
-    dia = {"fecha": "2023-12-31", "monedas": [
-        {"mercado": "futures", "simbolo": "AUSDT", "base": "A", "apertura": apertura, "pct_rango": 30.0, "pct_cuerpo": 12.0},
-        {"mercado": "futures", "simbolo": "BUSDT", "base": "B", "apertura": apertura, "pct_rango": 12.0, "pct_cuerpo": 2.0},
-        {"mercado": "spot", "simbolo": "NUEVAUSDT", "base": "NUEVA", "apertura": apertura, "pct_rango": 40.0, "pct_cuerpo": 40.0}]}
-    pred = P.predecir_dia(dia, cache, filas, x)
-    a, b, nueva = pred["monedas"]
-    assert nueva["parecido"] is None and nueva["puntuacion"] == {}  # sin velas: sin huella
-    assert 0 <= a["parecido"] <= 1 and len(a["vecinas"]) == 3
-    assert set(a["puntuacion"]) == {"rango", "cuerpo"} and set(b["puntuacion"]) == {"rango"}
-    # La biblioteca solo tiene explosiones con resultado conocido antes del escaneo
-    assert pred["biblioteca"]["explosiones"] == sum(f["escaneo"] + 10 * DIA <= apertura + DIA for f in filas)
-    # Resultado a 10 días
-    clave = {(f["mercado"], f["simbolo"], f["escaneo"]): f for f in filas}
-    clave[("futures", "AUSDT", apertura + DIA)] = {"max_despues": 61.234}
-    assert P.completar_resultados(pred, clave) and a["max_despues"] == 61.23
-    assert not P.completar_resultados(pred, clave)
-    # La web publica el día y el índice
+    for i, (mercado, simbolo, explota) in enumerate([("futures", "AUSDT", 100), ("spot", "AUSDT", 100), ("futures", "BUSDT", 70),
+                                                     ("futures", "CUSDT", None), ("spot", "DUSDT", 119)]):
+        t, v = serie(140, explota=explota, sube=0.6, semilla=i)
+        (cache / mercado).mkdir(parents=True, exist_ok=True)
+        np.savez_compressed(cache / mercado / f"{simbolo}.npz", t=t, ohlcv=v.astype(np.float32))
+    return cache
+
+
+def test_predecir_y_completar(tmp_path, monkeypatch):
+    monkeypatch.setattr(P, "VECINAS", 3)
+    cache = _cache(tmp_path)
+    rejilla = P.construir_rejilla(cache)
+    assert len(rejilla) and (rejilla.dia % (2 * DIA) == P.DESDE_REJILLA % (2 * DIA)).all()
+    dia = T0 + 120 * DIA  # cierre de la vela del día 119: DUSDT explota en ella (no es candidata)
+    pred = P.predecir(cache, dia, rejilla, ahora=dia + 3600_000)
+    assert pred["version"] == 2 and pred["escaneo_utc"].startswith(P._iso(dia)[:10]) and not P.reconstruida(pred)
+    assert pred["fecha"] == P.etiqueta(dia)
+    simbolos = [c["simbolo"] for c in pred["monedas"]]
+    assert "DUSDT" not in simbolos and simbolos.count("AUSDT") == 1  # en spot y futuros: una vez
+    assert pred["evaluadas"] == len(pred["monedas"]) == 3
+    assert all(c["pct_rango"] < P.QUIETA and 0 <= c["parecido"] <= 1 and c["fecha"] == pred["fecha"] for c in pred["monedas"])
+    assert [c["parecido"] for c in pred["monedas"]] == sorted((c["parecido"] for c in pred["monedas"]), reverse=True)
+    # La biblioteca solo tiene situaciones cuyo resultado ya se conocía
+    assert pred["biblioteca"]["situaciones"] <= ((rejilla.dia + 10 * DIA <= dia) & np.isfinite(rejilla.max10)).sum()
+    # Lo que pasó después se añade cuando se sabe
+    assert P.completar(pred, cache) and all(c["manana"] is not None and c["max_despues"] is not None for c in pred["monedas"])
+    assert pred["base"]["monedas"] == 3 and pred["base"]["llegaron"] is not None
+    assert not P.completar(pred, cache)
+    # Muy reciente: ni vela siguiente ni 10 días
+    tarde = P.predecir(cache, T0 + 139 * DIA, rejilla, ahora=T0 + 139 * DIA)
+    assert not P.completar(tarde, cache) or all(c.get("max_despues") is None for c in tarde["monedas"])
+
+
+def test_resumen_en_vivo_y_web(tmp_path):
+    monedas = [{"mercado": "spot", "simbolo": f"X{i}USDT", "manana": 12.0 if i < 2 else 3.0, "max_despues": 60.0 if i == 0 else 5.0}
+               for i in range(6)]
+    pred = {"version": 2, "fecha": "2026-11-07", "escaneo_utc": "2026-11-09T00:00:00Z", "calculada": "2026-11-09T02:00:00Z",
+            "evaluadas": 300, "monedas": monedas, "base": {"monedas": 300, "explotaron": 0.1, "llegaron": 0.04}}
+    assert P.resumen_dia(pred) == {"explotaron": 2, "de_manana": 5, "llegaron": 1, "de_10d": 5}
+    vivo = P.en_vivo([pred])
+    assert (vivo["explotaron"], vivo["de_manana"], vivo["llegaron"], vivo["de_10d"]) == (2, 5, 1, 5)
+    assert vivo["base_explotaron"] == 0.1 and vivo["base_llegaron"] == 0.04
+    vieja = dict(pred, calculada="2026-11-12T00:00:00Z", fecha="2026-11-06", escaneo_utc="2026-11-08T00:00:00Z")
+    assert P.reconstruida(vieja) and not P.reconstruida(pred)
     salida = tmp_path / "datos"
     salida.mkdir()
-    assert P.reconstruida(pred)  # calculada hoy para un escaneo de 2023
-    pred["calculada"] = pred["escaneo_utc"].replace("00:00:00", "03:00:00")  # como si se hubiera calculado ese día
-    assert not P.reconstruida(pred) and P.reconstruida({"escaneo_utc": pred["escaneo_utc"]})
-    assert not P.reconstruida({"escaneo_utc": "2026-11-09T00:00:00Z"})  # del workflow diario, sin la hora
-    (salida / "2023-12-31.json").write_text(json.dumps(pred), encoding="utf-8")
-    (salida / "prueba.json").write_text(json.dumps({"desde": "2024-01-01", "grupos": {}}), encoding="utf-8")
-    web.write_predictions(salida, tmp_path / "site" / "prediccion", "x")
-    indice = json.loads((tmp_path / "site" / "prediccion" / "indice.json").read_text(encoding="utf-8"))
-    dia_ = indice["dias"][0]
-    assert (dia_["fecha"], dia_["monedas"], dia_["con_resultado"]) == ("2023-12-31", 3, 1) and dia_["reconstruida"] is False
-    assert dia_["grupos"]["rango"]["top5"] == {"llegaron": 1, "de": 1} and dia_["grupos"]["rango"]["monedas"] == 2
-    assert indice["en_vivo"] == {"reales": {}, "reconstruidas": {}}  # en_vivo pide al menos 5 monedas con resultado
-    assert indice["prueba"]["desde"] == "2024-01-01" and (tmp_path / "site" / "prediccion" / "2023-12-31.json").exists()
+    (salida / "2026-11-07.json").write_text(json.dumps(pred), encoding="utf-8")
+    (salida / "2026-11-06.json").write_text(json.dumps(vieja), encoding="utf-8")
+    (salida / "2026-11-05.json").write_text(json.dumps({"fecha": "2026-11-05", "monedas": []}), encoding="utf-8")  # versión anterior
+    (salida / "prueba.json").write_text(json.dumps({"desde": "2025-01-01"}), encoding="utf-8")
+    web.write_predictions(salida, tmp_path / "site", "x")
+    indice = json.loads((tmp_path / "site" / "indice.json").read_text(encoding="utf-8"))
+    assert [d["fecha"] for d in indice["dias"]] == ["2026-11-07", "2026-11-06"]
+    assert indice["dias"][0]["top5"]["explotaron"] == 2 and indice["dias"][1]["reconstruida"] is True
+    assert indice["en_vivo"]["reales"]["dias_manana"] == 1 and indice["prueba"]["desde"] == "2025-01-01"
+    assert not (tmp_path / "site" / "2026-11-05.json").exists()
 
 
-def test_en_vivo_y_prueba():
-    monedas = [{"pct_rango": 10.0 + i, "pct_cuerpo": 1.0, "puntuacion": {"rango": i / 9}, "max_despues": 60.0 if i >= 8 else 5.0}
-               for i in range(10)]
-    vivo = P.en_vivo([{"monedas": monedas}])
-    assert vivo["rango"]["base"] == 0.2 and vivo["rango"]["top5"] == 0.4 and vivo["rango"]["mejor_del_dia"] == 1.0
-    assert "cuerpo" not in vivo
-    rng = np.random.default_rng(3)
-    n = 3000
-    escaneo = 1_704_067_200_000 - 400 * DIA + np.sort(rng.integers(0, 500, n)) * DIA
-    x = rng.normal(size=(n, 3)).astype(np.float32)
-    filas = [{"escaneo": int(e), "pct_rango": 12.0 + float(xi[0]), "pct_cuerpo": 0.0, "max_despues": 80.0 if xi[0] > 1 else 0.0}
-             for e, xi in zip(escaneo, x)]
-    res = P.probar(filas, x)
-    g = res["grupos"]["rango"]
-    assert g["top5"]["combinada"] > g["base"] and g["top5"]["huella"] > g["base"] and "cuerpo" not in res["grupos"]
+def test_probar_sin_mirar_el_futuro(tmp_path, monkeypatch):
+    monkeypatch.setattr(P, "VECINAS", 3)
+    rejilla = P.construir_rejilla(_cache(tmp_path))
+    res = P.probar(rejilla, desde="2024-01-01")
+    assert res["dias"] > 0 and 0 <= res["top5"]["explotaron"] <= 1 and 0 <= res["base"]["llegaron"] <= 1
