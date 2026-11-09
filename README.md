@@ -113,8 +113,10 @@ escanear**, que la sustituye por la medida del día completo.
 
 ### Predicción
 
-Para cada moneda de un día del seguimiento, busca explosiones pasadas cuyos movimientos **antes del escaneo**
-se parecen y mira cuántas de ellas subieron después. La calcula cada día el workflow **Predicción**
+Las monedas del **último escaneo** que pueden subir en los **próximos 10 días**: para cada una busca explosiones
+pasadas cuyos movimientos **antes del escaneo** se parecen y mira cuántas de ellas subieron después. Al lado, el
+precio actual y cuánto lleva desde el escaneo (se actualiza cada minuto). Los escaneos anteriores no se listan:
+solo sirven para medir si acierta. La calcula cada día el workflow **Predicción**
 (`python -m scanner_pump.prediccion`) y la guarda en `datos/prediccion/AAAA-MM-DD.json`.
 
 - **La huella** de una moneda son sus velas de 2H, 4H, 8H y 12H hasta el escaneo (el cierre de la vela de la

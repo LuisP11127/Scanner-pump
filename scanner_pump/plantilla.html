@@ -139,6 +139,7 @@ input[type="search"] { width: 13rem; max-width: 100%; }
 body.tracking .scan-only, body.listing .scan-only, body.predicting .scan-only { display: none !important; }
 .pred-like { display: inline-block; margin: 0 6px 0 0; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); font-size: 12px; color: var(--muted); }
 .pred-like.up { border-color: var(--up); color: var(--up); }
+.coins td.c-sim { white-space: normal; min-width: 240px; line-height: 1.9; }
 .pred-stats { padding: 4px 14px 14px; display: grid; gap: 8px; font-size: 14px; }
 .pred-stats p { margin: 0; }
 .badge.off { color: var(--down); border-color: currentColor; margin-left: 4px; }
@@ -222,7 +223,7 @@ body.tracking .scan-only, body.listing .scan-only, body.predicting .scan-only { 
   .coins td[data-label]::before { content: attr(data-label) " "; color: var(--muted); font-family: var(--font-body); font-weight: 400; }
   .coins td:first-child, .coins td:last-child { padding: 0; }  /* sin el margen de escritorio */
   .coins.list tbody tr { grid-template-areas: "coin since" "date expl" "first now"; }
-  .coins.pred tbody tr { grid-template-areas: "coin rank" "score max" "like like" "rango cuerpo" "sim sim"; }
+  .coins.pred tbody tr { grid-template-areas: "coin rank" "score max" "like like" "rango cuerpo" "now now" "sim sim"; }
   .coins .c-rank { grid-area: rank; } .coins .c-rank::before { content: "#"; } .coins .c-score { grid-area: score; text-align: left; } .coins .c-max { grid-area: max; }
   .coins .c-like { grid-area: like; text-align: left; } .coins .c-sim { grid-area: sim; white-space: normal; overflow: visible; }
   .coins .c-date { grid-area: date; }
@@ -414,12 +415,10 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
 
   <section class="track" id="view-pred" aria-label="Predicción" hidden>
     <div class="track-bar">
-      <label>Vela
-        <select id="pred-day" aria-label="Día del seguimiento"></select>
-      </label>
       <span class="field">Medida
         <span class="seg" id="pred-crit" role="group" aria-label="Medida de la subida"></span>
       </span>
+      <button class="btn" id="pred-refresh" type="button">Actualizar precios</button>
       <span class="scan-status" id="pred-status" aria-live="polite"></span>
     </div>
     <p class="gh-note" id="pred-note"></p>
@@ -2435,7 +2434,7 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
         .then((r) => (r.ok ? r.json() : null)).catch(() => null)
         .then((indice) => {
           pred.indice = indice;
-          if (indice && indice.dias.length && !pred.fecha) pred.fecha = indice.dias[0].fecha;
+          if (indice && indice.dias.length) pred.fecha = indice.dias[0].fecha;  // siempre el último escaneo
         });
     }
     return pred.cargando;
@@ -2458,23 +2457,17 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
       body.append(h("div", { class: "empty", text: "Todavía no hay predicciones. Las calcula cada día el workflow «Predicción» después del escaneo automático." }));
       return;
     }
-    const select = $("pred-day");
-    if (select.options.length !== indice.dias.length) {
-      select.textContent = "";
-      for (const d of indice.dias) select.append(h("option", { value: d.fecha, text: "Vela del " + dayTitle(d.fecha) + " (" + d.monedas + ")" }));
-    }
-    select.value = pred.fecha;
-    status.textContent = "Cargando la vela del " + dayTitle(pred.fecha) + "…";
+    if (!(pred.fecha in pred.dias)) status.textContent = "Cargando el último escaneo…";
     const dia = await loadPredDia(pred.fecha);
     if ($("view-pred").hidden) return;
     status.textContent = "";
     const todas = dia ? dia.monedas : [];
     critButtons($("pred-crit"), todas, pred.grupo, (k) => { pred.grupo = k; store.set("prediccion-medida", k); renderPrediccion(); }, MIN_PCT);
-    $("pred-note").textContent = "Para cada moneda del escaneo se comparan sus velas de 2H, 4H, 8H y 12H antes del escaneo (forma del " +
+    $("pred-note").textContent = "Monedas del último escaneo que pueden subir en los próximos 10 días. Para cada una se comparan sus velas de 2H, 4H, 8H y 12H antes del escaneo (forma del " +
       "precio, volumen, volatilidad y fractales de 5 velas) con las de " + (dia ? dia.biblioteca.explosiones.toLocaleString("es-ES") : "las") +
       " explosiones desde 2023 cuyo resultado ya se conocía. «Parecidas que subieron»: de las 50 más parecidas, cuántas subieron +50 % " +
       "en los 10 días siguientes (también cuentan las que no subieron). La puntuación junta eso con el tamaño de la vela, que en las " +
-      "pruebas acertó más que cada cosa por separado. Pulsa una moneda para ver su gráfico.";
+      "pruebas acertó más que cada cosa por separado. Los escaneos anteriores solo sirven para medir si acierta (abajo). Pulsa una moneda para ver su gráfico.";
     body.textContent = "";
     body.append(predDayCard(dia), predStatsCard(indice));
   }
@@ -2485,12 +2478,16 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
     const sinHuella = (dia ? dia.monedas : []).filter((c) => (c[campo] || 0) >= MIN_PCT && c.parecido == null).length;
     const escaneo = coins.length ? coins[0].apertura + DAY : 0;
     const pasados = escaneo ? Math.floor((Date.now() - escaneo) / DAY) : 0;
+    const fin = escaneo + 10 * DAY;
     const head = h("header", { class: "day-head" },
-      h("h2", { text: "Vela del " + (dia ? dayTitle(dia.fecha) : "") }),
+      h("h2", { text: "Para los próximos 10 días" }),
       h("div", { class: "day-stats" },
+        h("span", null, "Escaneo de la vela del ", h("b", { text: dia ? dayTitle(dia.fecha) : "" })),
         h("span", null, h("b", { text: String(coins.length) }), " monedas por " + CRITS[grupo]),
         sinHuella ? h("span", { title: "Monedas con menos de 15 días de velas de 12H: aún no tienen huella", text: sinHuella + " sin huella (recién listadas)" }) : null,
-        h("span", { text: pasados >= 10 ? "Resultado a 10 días ya conocido" : "Faltan " + Math.max(0, 10 - pasados) + " días para conocer el resultado" })));
+        escaneo ? h("span", { class: pasados >= 10 ? "down" : "", text: pasados >= 10
+          ? "Ya pasaron los 10 días: falta el escaneo de hoy"
+          : "Hasta el " + dayTitle(labelOf(fin - DAY)) + " (quedan " + (10 - pasados) + " días)" }) : null));
     const table = h("table", { class: "coins pred" });
     table.append(h("thead", null, h("tr", null,
       h("th", { class: "r", text: "#" }),
@@ -2500,12 +2497,16 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
       h("th", { class: "r", text: "Mín→Máx" }),
       h("th", { class: "r", text: "Apert→Cierre" }),
       h("th", { text: "Se parece a", title: "Las tres explosiones pasadas más parecidas y cuánto subieron en los 10 días siguientes" }),
-      h("th", { class: "r", text: "Máx. 10 días", title: "Lo que subió el máximo en los 10 días siguientes al escaneo, frente al cierre de la vela" }))));
+      h("th", { class: "r", text: "Precio actual" }),
+      h("th", { class: "r", text: "Desde el escaneo", title: "Variación del precio actual respecto al cierre de la vela (el momento del escaneo)" }))));
     const tbody = h("tbody");
     coins.forEach((c, i) => {
       const parecidas = c.vecinas.map(([sym, mercado, esc, max]) => h("span", { class: "pred-like" + (max >= 50 ? " up" : ""),
         title: sym + " (" + (MARKET_NAMES[mercado] || mercado) + "), vela del " + dayTitle(labelOf(esc - DAY)) + ": máximo " + fmtPct(max) + " en 10 días",
         text: sym.replace(/USDT$/, "") + " " + shortDate(labelOf(esc - DAY)) + " " + fmtPct(max) }));
+      const precios = track.prices[c.mercado];
+      const ahora = precios ? precios.get(c.simbolo) : null;
+      const desde = ahora != null && c.close ? (ahora / c.close - 1) * 100 : null;
       const tr = h("tr", { tabindex: "0", title: "Ver el gráfico de " + c.simbolo },
         h("td", { class: "r num c-rank", text: String(i + 1) }),
         h("td", { class: "c-coin" }, h("span", { class: "coin" }, c.base || c.simbolo, h("small", { text: c.quote ? "/" + c.quote : "" })),
@@ -2515,8 +2516,9 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
         h("td", { class: "r num hot c-rango", "data-label": "Mín→Máx", text: fmtPct(c.pct_rango) }),
         h("td", { class: "r num c-cuerpo " + (c.pct_cuerpo >= 0 ? "up" : "down"), "data-label": "Apert→Cierre", text: fmtPct(c.pct_cuerpo) }),
         h("td", { class: "c-sim", "data-label": "Se parece a" }, ...parecidas),
-        h("td", { class: "r num c-max " + (c.max_despues == null ? "" : c.max_despues >= 50 ? "up" : ""), "data-label": "Máx. 10 días",
-          text: c.max_despues == null ? "en curso" : fmtPct(c.max_despues) }));
+        h("td", { class: "r num c-now", "data-label": "Ahora", text: ahora == null ? "—" : fmtPrice(ahora) }),
+        h("td", { class: "r num c-max " + (desde == null ? "" : desde >= 0 ? "up" : "down"), "data-label": "Desde el escaneo" },
+          desde == null ? "—" : fmtPct(desde), changeBar(desde)));
       const open = () => openTrackedChart(coins, i);
       tr.addEventListener("click", open);
       tr.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } });
@@ -2555,7 +2557,14 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
       "también caen mucho. Solo cuentan los pares que Binance tiene hoy (los retirados no están en la biblioteca)." }));
     return h("article", { class: "day" }, h("header", { class: "day-head" }, h("h2", { text: "¿Acierta? (" + CRITS[grupo] + ")" })), box);
   }
-  $("pred-day").addEventListener("change", (e) => { pred.fecha = e.target.value; renderPrediccion(); });
+  function refreshPredPrices() {
+    $("pred-status").textContent = "Actualizando precios…";
+    return loadPrices(["spot", "futures"]).then((problems) => {
+      if ($("view-pred").hidden) return;
+      renderPrediccion().then(() => { $("pred-status").textContent = problems.length ? "Sin precios: " + problems.join(" ") : "Precios de las " + fmtTime(Date.now()); });
+    });
+  }
+  $("pred-refresh").addEventListener("click", refreshPredPrices);
 
   const VIEW_HASH = { scan: "", list: "listadas", track: "seguimiento", pred: "prediccion" };
   function viewFromHash() {
@@ -2576,7 +2585,8 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
       loadRemote().then(() => { renderTracking(); refreshPrices(); });
       track.timer = setInterval(() => { if (document.visibilityState === "visible") refreshPrices(); }, 60000);
     } else if (view === "pred") {
-      renderPrediccion();
+      renderPrediccion().then(refreshPredPrices);
+      track.timer = setInterval(() => { if (document.visibilityState === "visible") refreshPredPrices(); }, 60000);
     } else if (view === "list") {
       renderListing();
       const fresh = listing.pares && Date.now() - listing.updated < 30 * 60000;  // si no, se vuelven a pedir los pares nuevos
