@@ -18,7 +18,7 @@ from typing import Optional, Sequence
 
 from .binance import SPOT, BinanceClient
 from .listados import read_listings
-from .prediccion import en_vivo
+from .prediccion import en_vivo, reconstruida, resumen_dia
 from .report import render_page
 from .scanner import is_tokenized_stock
 from .seguimiento import collect_days
@@ -59,10 +59,16 @@ def write_predictions(source: Path, dest: Path, generated: str) -> None:
         test = json.loads((source / "prueba.json").read_text(encoding="utf-8"))
     except (OSError, ValueError):
         test = None
-    index = {"generado": generated, "prueba": test, "en_vivo": en_vivo(days),
-             "dias": [{"fecha": d["fecha"], "monedas": len(d.get("monedas", [])),
-                       "con_resultado": sum(c.get("max_despues") is not None for c in d.get("monedas", []))}
-                      for d in reversed(days)]}
+    # Por fecha de escaneo, la más reciente primero. Las reconstruidas (calculadas días después, con los datos que
+    # había ese día) se miden aparte de las que se calcularon el mismo día.
+    days.sort(key=lambda d: d.get("escaneo_utc") or d["fecha"], reverse=True)
+    index = {"generado": generated, "prueba": test,
+             "en_vivo": {"reales": en_vivo([d for d in days if not reconstruida(d)]),
+                         "reconstruidas": en_vivo([d for d in days if reconstruida(d)])},
+             "dias": [{"fecha": d["fecha"], "escaneo_utc": d.get("escaneo_utc"), "reconstruida": reconstruida(d),
+                       "monedas": len(d.get("monedas", [])),
+                       "con_resultado": sum(c.get("max_despues") is not None for c in d.get("monedas", [])),
+                       "grupos": resumen_dia(d)} for d in days]}
     write_json(dest / "indice.json", index)
     print(f"{len(days)} días de predicción en {dest}")
 

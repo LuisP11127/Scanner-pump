@@ -299,6 +299,7 @@ def predecir_dia(dia: dict, carpeta: Path, filas: list[dict], x: np.ndarray) -> 
     escaneo = min((int(c["apertura"]) + DIA_MS for c in monedas), default=0)
     conocido = np.array([f["escaneo"] + VENTANA_DIAS * DIA_MS <= escaneo for f in filas], dtype=bool)
     out = {"fecha": dia["fecha"], "escaneo_utc": datetime.fromtimestamp(escaneo / 1000, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ") if escaneo else None,
+           "calculada": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
            "biblioteca": {"explosiones": int(conocido.sum()),
                           "llegaron": int(sum(f["max_despues"] >= OBJETIVO for f, k in zip(filas, conocido) if k))},
            "monedas": []}
@@ -327,6 +328,37 @@ def predecir_dia(dia: dict, carpeta: Path, filas: list[dict], x: np.ndarray) -> 
                 puntos = combinar(np.array([f["parecido"] for f in del_grupo]), np.array([f[campo] for f in del_grupo]))
                 for f, s in zip(del_grupo, puntos):
                     f["puntuacion"][grupo] = round(float(s), 4)
+    return out
+
+
+PRIMERA_DEL_DIA = "2026-11-08T00:00:00Z"  # escaneo de la primera predicción calculada el mismo día
+
+
+def reconstruida(prediccion: dict) -> bool:
+    """¿Se calculó después (más de un día tras el escaneo, con los datos que había ese día) y no el mismo día?"""
+    calculada, escaneo = prediccion.get("calculada"), prediccion.get("escaneo_utc")
+    if not escaneo:
+        return True
+    if not calculada:  # las primeras del workflow diario no guardaban la hora; las reconstruidas acaban antes
+        return escaneo < PRIMERA_DEL_DIA
+    a = datetime.fromisoformat(calculada.replace("Z", "+00:00"))
+    return a - datetime.fromisoformat(escaneo.replace("Z", "+00:00")) > timedelta(days=1)
+
+
+def resumen_dia(prediccion: dict) -> dict:
+    """Por medida: cuántas monedas, cuántas de las 5 mejor puntuadas llegaron a +50 % y la media del día
+    (solo con las que ya tienen resultado a 10 días)."""
+    out = {}
+    for grupo, (campo, _) in GRUPOS.items():
+        cs = [c for c in prediccion.get("monedas", []) if grupo in (c.get("puntuacion") or {})]
+        if not cs:
+            continue
+        cs.sort(key=lambda c: -c["puntuacion"][grupo])
+        con = [c for c in cs if c.get("max_despues") is not None]
+        top = [c for c in cs[:5] if c.get("max_despues") is not None]
+        out[grupo] = {"monedas": len(cs), "con_resultado": len(con),
+                      "top5": {"llegaron": sum(c["max_despues"] >= OBJETIVO for c in top), "de": len(top)},
+                      "base": round(sum(c["max_despues"] >= OBJETIVO for c in con) / len(con), 4) if con else None}
     return out
 
 

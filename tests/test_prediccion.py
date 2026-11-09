@@ -108,11 +108,18 @@ def test_predecir_dia_resultados_y_web(tmp_path, monkeypatch):
     # La web publica el día y el índice
     salida = tmp_path / "datos"
     salida.mkdir()
+    assert P.reconstruida(pred)  # calculada hoy para un escaneo de 2023
+    pred["calculada"] = pred["escaneo_utc"].replace("00:00:00", "03:00:00")  # como si se hubiera calculado ese día
+    assert not P.reconstruida(pred) and P.reconstruida({"escaneo_utc": pred["escaneo_utc"]})
+    assert not P.reconstruida({"escaneo_utc": "2026-11-09T00:00:00Z"})  # del workflow diario, sin la hora
     (salida / "2023-12-31.json").write_text(json.dumps(pred), encoding="utf-8")
     (salida / "prueba.json").write_text(json.dumps({"desde": "2024-01-01", "grupos": {}}), encoding="utf-8")
     web.write_predictions(salida, tmp_path / "site" / "prediccion", "x")
     indice = json.loads((tmp_path / "site" / "prediccion" / "indice.json").read_text(encoding="utf-8"))
-    assert indice["dias"] == [{"fecha": "2023-12-31", "monedas": 3, "con_resultado": 1}]
+    dia_ = indice["dias"][0]
+    assert (dia_["fecha"], dia_["monedas"], dia_["con_resultado"]) == ("2023-12-31", 3, 1) and dia_["reconstruida"] is False
+    assert dia_["grupos"]["rango"]["top5"] == {"llegaron": 1, "de": 1} and dia_["grupos"]["rango"]["monedas"] == 2
+    assert indice["en_vivo"] == {"reales": {}, "reconstruidas": {}}  # en_vivo pide al menos 5 monedas con resultado
     assert indice["prueba"]["desde"] == "2024-01-01" and (tmp_path / "site" / "prediccion" / "2023-12-31.json").exists()
 
 

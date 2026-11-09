@@ -142,6 +142,10 @@ body.tracking .scan-only, body.listing .scan-only, body.predicting .scan-only { 
 .coins td.c-sim { white-space: normal; min-width: 240px; line-height: 1.9; }
 .pred-stats { padding: 4px 14px 14px; display: grid; gap: 8px; font-size: 14px; }
 .pred-stats p { margin: 0; }
+.day-head > h2 { margin: 0; font: 600 21px/1.15 var(--font-display); letter-spacing: 0.01em; }
+.pred-more { padding: 8px 14px 12px; border-top: 1px solid var(--grid); }
+.coins .hit { color: var(--up); font-weight: 600; }
+.coins .miss { color: var(--muted); }
 .badge.off { color: var(--down); border-color: currentColor; margin-left: 4px; }
 .coins .c-expl { color: var(--muted); }
 .coins .c-expl b { color: var(--fg); font-family: var(--font-mono); font-weight: 500; }
@@ -223,7 +227,7 @@ body.tracking .scan-only, body.listing .scan-only, body.predicting .scan-only { 
   .coins td[data-label]::before { content: attr(data-label) " "; color: var(--muted); font-family: var(--font-body); font-weight: 400; }
   .coins td:first-child, .coins td:last-child { padding: 0; }  /* sin el margen de escritorio */
   .coins.list tbody tr { grid-template-areas: "coin since" "date expl" "first now"; }
-  .coins.pred tbody tr { grid-template-areas: "coin rank" "score max" "like like" "rango cuerpo" "now now" "sim sim"; }
+  .coins.pred tbody tr { grid-template-areas: "coin rank" "score high" "like like" "rango cuerpo" "max max" "sim sim"; }
   .coins .c-rank { grid-area: rank; } .coins .c-rank::before { content: "#"; } .coins .c-score { grid-area: score; text-align: left; } .coins .c-max { grid-area: max; }
   .coins .c-like { grid-area: like; text-align: left; } .coins .c-sim { grid-area: sim; white-space: normal; overflow: visible; }
   .coins .c-date { grid-area: date; }
@@ -1881,7 +1885,10 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
         .finally(() => {
           rangeActive.delete(key);
           showRange(key);
-          if (!rangeActive.size && !rangeWanted.size) saveRanges();  // cola terminada: se guarda ya
+          if (!rangeActive.size && !rangeWanted.size) {  // cola terminada: se guarda ya
+            saveRanges();
+            if (!$("view-pred").hidden) renderPrediccion();  // los aciertos «por ahora» de cada predicción
+          }
           else { clearTimeout(rangeSaveTimer); rangeSaveTimer = setTimeout(saveRanges, 1000); }
           pumpRanges();
         });
@@ -1925,7 +1932,7 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
     return td;
   }
   function showRange(key) {
-    for (const tr of document.querySelectorAll("#track-days tr[data-key]")) {
+    for (const tr of document.querySelectorAll("#track-days tr[data-key], #pred-body tr[data-key]")) {
       if (tr.dataset.key !== key || !tr._coin) continue;
       fillRange(tr.querySelector(".c-low"), tr._coin, "low");
       fillRange(tr.querySelector(".c-high"), tr._coin, "high");
@@ -2425,17 +2432,19 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
   // Monedas de cada día del seguimiento cuyos movimientos antes del escaneo (velas de 2H, 4H, 8H y 12H) se parecen a
   // los de explosiones pasadas que subieron +50 % en los 10 días siguientes. Lo calcula cada día el workflow
   // «Predicción» (scanner_pump/prediccion.py) y la página solo lo lee.
-  const pred = { indice: null, dias: {}, fecha: null, grupo: store.get("prediccion-medida") === "cuerpo" ? "cuerpo" : "rango", cargando: null };
+  const pred = { indice: null, dias: {}, abiertos: null, todas: new Set(), grupo: store.get("prediccion-medida") === "cuerpo" ? "cuerpo" : "rango", cargando: null };
+  const PRED_TOP = 10;  // monedas que se ven de cada predicción (el resto con «Ver todas»)
+  // Cada predicción lleva la fecha del escaneo (cierre de la vela, 00:00 UTC): la vela del 6 de noviembre se
+  // escanea y se predice el 08-11-2026, y se mide durante los 10 días siguientes.
+  const predEscaneo = (d) => (d.escaneo_utc ? Date.parse(d.escaneo_utc) : openOf(d.fecha) + DAY);
+  const fechaDMA = (ms) => { const t = new Date(ms).toISOString(); return t.slice(8, 10) + "-" + t.slice(5, 7) + "-" + t.slice(0, 4); };
   const PRED_CAMPO = { rango: "pct_rango", cuerpo: "pct_cuerpo" };
   const pctEntero = (v) => (v == null ? "—" : Math.round(v * 100) + " %");
   function loadPredIndice() {
     if (!pred.cargando) {
       pred.cargando = fetch("prediccion/indice.json?t=" + Date.now(), { cache: "no-store" })
         .then((r) => (r.ok ? r.json() : null)).catch(() => null)
-        .then((indice) => {
-          pred.indice = indice;
-          if (indice && indice.dias.length) pred.fecha = indice.dias[0].fecha;  // siempre el último escaneo
-        });
+        .then((indice) => { pred.indice = indice; });
     }
     return pred.cargando;
   }
@@ -2457,37 +2466,120 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
       body.append(h("div", { class: "empty", text: "Todavía no hay predicciones. Las calcula cada día el workflow «Predicción» después del escaneo automático." }));
       return;
     }
-    if (!(pred.fecha in pred.dias)) status.textContent = "Cargando el último escaneo…";
-    const dia = await loadPredDia(pred.fecha);
+    if (!pred.abiertos) pred.abiertos = new Set([indice.dias[0].fecha]);  // la más reciente, abierta
+    const faltan = indice.dias.filter((d) => pred.abiertos.has(d.fecha) && !(d.fecha in pred.dias));
+    if (faltan.length) {
+      status.textContent = "Cargando la predicción…";
+      await Promise.all(faltan.map((d) => loadPredDia(d.fecha)));
+    }
     if ($("view-pred").hidden) return;
-    status.textContent = "";
-    const todas = dia ? dia.monedas : [];
-    critButtons($("pred-crit"), todas, pred.grupo, (k) => { pred.grupo = k; store.set("prediccion-medida", k); renderPrediccion(); }, MIN_PCT);
-    $("pred-note").textContent = "Monedas del último escaneo que pueden subir en los próximos 10 días. Para cada una se comparan sus velas de 2H, 4H, 8H y 12H antes del escaneo (forma del " +
-      "precio, volumen, volatilidad y fractales de 5 velas) con las de " + (dia ? dia.biblioteca.explosiones.toLocaleString("es-ES") : "las") +
-      " explosiones desde 2023 cuyo resultado ya se conocía. «Parecidas que subieron»: de las 50 más parecidas, cuántas subieron +50 % " +
-      "en los 10 días siguientes (también cuentan las que no subieron). La puntuación junta eso con el tamaño de la vela, que en las " +
-      "pruebas acertó más que cada cosa por separado. Los escaneos anteriores solo sirven para medir si acierta (abajo). Pulsa una moneda para ver su gráfico.";
+    if (faltan.length) status.textContent = "";
+    const cargadas = Object.values(pred.dias).filter(Boolean).flatMap((d) => d.monedas);
+    critButtons($("pred-crit"), cargadas, pred.grupo, (k) => { pred.grupo = k; store.set("prediccion-medida", k); renderPrediccion(); }, MIN_PCT);
+    const ultimo = indice.dias[0];
+    $("pred-note").textContent = "Cada día, después del escaneo, se predicen las monedas que pueden subir +50 % en los 10 días siguientes, " +
+      "y aquí quedan todas para ir viendo si acertó. Para cada moneda se comparan sus velas de 2H, 4H, 8H y 12H antes del escaneo (forma del " +
+      "precio, volumen, volatilidad y fractales de 5 velas) con las de las explosiones desde 2023 cuyo resultado ya se conocía ese día. " +
+      "«Parecidas que subieron»: de las 50 más parecidas, cuántas subieron +50 % en los 10 días siguientes (también cuentan las que no subieron). " +
+      "La puntuación junta eso con el tamaño de la vela. La predicción del " + fechaDMA(predEscaneo(ultimo)) + " se mide hasta el " +
+      fechaDMA(predEscaneo(ultimo) + 10 * DAY) + ". Pulsa una moneda para ver su gráfico.";
     body.textContent = "";
-    body.append(predDayCard(dia), predStatsCard(indice));
+    body.append(predAciertoCard(indice), ...indice.dias.map(predDayCard), predStatsCard(indice));
   }
-  function predDayCard(dia) {
-    const grupo = pred.grupo, campo = PRED_CAMPO[grupo];
+  function togglePredDia(fecha) {
+    if (pred.abiertos.has(fecha)) pred.abiertos.delete(fecha);
+    else pred.abiertos.add(fecha);
+    renderPrediccion();
+  }
+  // Tasa de acierto de todas las predicciones con resultado: de las 5 mejor puntuadas de cada día, cuántas
+  // llegaron a +50 % en los 10 días siguientes. Las del mismo día se cuentan aparte de las reconstruidas.
+  function predAcierto(dias, grupo) {
+    const r = { dias: 0, llegaron: 0, de: 0, base: 0, pendientes: 0 };
+    for (const d of dias) {
+      const g = d.grupos && d.grupos[grupo];
+      if (!g) continue;
+      if (!d.con_resultado) { r.pendientes++; continue; }
+      r.dias++;
+      r.llegaron += g.top5.llegaron;
+      r.de += g.top5.de;
+      r.base += g.base || 0;
+    }
+    r.base = r.dias ? r.base / r.dias : null;
+    return r;
+  }
+  function predAciertoCard(indice) {
+    const grupo = pred.grupo;
+    const reales = predAcierto(indice.dias.filter((d) => !d.reconstruida), grupo);
+    const recon = predAcierto(indice.dias.filter((d) => d.reconstruida), grupo);
+    const box = h("div", { class: "pred-stats" });
+    const linea = (titulo, r, extra) => h("p", null, h("b", { text: titulo }), " ",
+      r.dias ? h("span", null, "(" + r.dias + (r.dias === 1 ? " día" : " días") + " con resultado): de las 5 mejor puntuadas de cada día llegaron a +50 % ",
+        h("b", { class: "up", text: r.llegaron + " de " + r.de + " (" + pctEntero(r.de ? r.llegaron / r.de : null) + ")" }),
+        "; de todas las monedas del día, de media el " + pctEntero(r.base) + ".") : h("span", { text: extra || "Todavía ninguna con resultado." }),
+      r.pendientes ? " " + r.pendientes + (r.pendientes === 1 ? " en curso." : " en curso.") : "");
+    const primera = indice.dias.filter((d) => !d.reconstruida).slice(-1)[0];
+    box.append(linea("Predicciones del día:", reales, primera
+      ? "Todavía ninguna con resultado: la primera (" + fechaDMA(predEscaneo(primera)) + ") se cierra el " + fechaDMA(predEscaneo(primera) + 10 * DAY) + "."
+      : "Todavía ninguna."));
+    if (recon.dias || recon.pendientes) {
+      box.append(linea("Reconstruidas:", recon));
+      box.append(h("p", { class: "gh-note", text: "Las reconstruidas se calcularon después, pero solo con lo que se sabía el día del escaneo (las velas hasta el escaneo " +
+        "y las explosiones cuyo resultado ya se conocía); sirven para medir, pero la tasa que vale es la de las predicciones del día." }));
+    }
+    return h("article", { class: "day" }, h("header", { class: "day-head" }, h("h2", { text: "Tasa de acierto (" + CRITS[grupo] + ")" })), box);
+  }
+  function predDayCard(entry) {
+    const grupo = pred.grupo;
+    const escaneo = predEscaneo(entry), fin = escaneo + 10 * DAY, now = Date.now();
+    const terminado = entry.con_resultado > 0;
+    const resumen = entry.grupos && entry.grupos[grupo];
+    const open = pred.abiertos.has(entry.fecha);
+    const dia = open ? pred.dias[entry.fecha] : null;
     const coins = (dia ? dia.monedas : []).filter((c) => c.puntuacion && c.puntuacion[grupo] != null)
       .sort((a, b) => b.puntuacion[grupo] - a.puntuacion[grupo]);
-    const sinHuella = (dia ? dia.monedas : []).filter((c) => (c[campo] || 0) >= MIN_PCT && c.parecido == null).length;
-    const escaneo = coins.length ? coins[0].apertura + DAY : 0;
-    const pasados = escaneo ? Math.floor((Date.now() - escaneo) / DAY) : 0;
-    const fin = escaneo + 10 * DAY;
-    const head = h("header", { class: "day-head" },
-      h("h2", { text: "Para los próximos 10 días" }),
-      h("div", { class: "day-stats" },
-        h("span", null, "Escaneo de la vela del ", h("b", { text: dia ? dayTitle(dia.fecha) : "" })),
-        h("span", null, h("b", { text: String(coins.length) }), " monedas por " + CRITS[grupo]),
-        sinHuella ? h("span", { title: "Monedas con menos de 15 días de velas de 12H: aún no tienen huella", text: sinHuella + " sin huella (recién listadas)" }) : null,
-        escaneo ? h("span", { class: pasados >= 10 ? "down" : "", text: pasados >= 10
-          ? "Ya pasaron los 10 días: falta el escaneo de hoy"
-          : "Hasta el " + dayTitle(labelOf(fin - DAY)) + " (quedan " + (10 - pasados) + " días)" }) : null));
+    for (const c of coins) {
+      const precios = track.prices[c.mercado], p = precios ? precios.get(c.simbolo) : null;
+      c.ahora = p == null || terminado ? null : p;
+    }
+    const todas = pred.todas.has(entry.fecha);
+    const visibles = todas ? coins : coins.slice(0, PRED_TOP);
+    if (!terminado && now < fin) wantRanges(visibles);
+    const toggle = h("button", { class: "day-toggle", type: "button", "aria-expanded": String(open) });
+    toggle.innerHTML = ICON_CHEVRON;
+    toggle.append(h("h2", { text: "Predicción del " + fechaDMA(escaneo) }));
+    toggle.addEventListener("click", () => togglePredDia(entry.fecha));
+    let estado;
+    if (terminado) {
+      estado = resumen ? [h("span", null, "Top 5: ", h("b", { class: resumen.top5.llegaron ? "up" : "", text: resumen.top5.llegaron + " de " + resumen.top5.de }), " llegaron a +50 %"),
+        h("span", null, "Media del día ", h("b", { text: pctEntero(resumen.base) }))] : [];
+      estado.push(h("span", { text: "Terminada el " + fechaDMA(fin) }));
+    } else {
+      const pasados = Math.floor((now - escaneo) / DAY);
+      const top = coins.slice(0, 5).map((c) => afterPct(c, "high"));
+      estado = [];
+      if (dia && top.some((v) => v != null) && now < fin) {
+        estado.push(h("span", null, "Top 5 por ahora: ", h("b", { class: "up", text: top.filter((v) => v != null && v >= 50).length + " de " + top.length }), " pasaron +50 %"));
+      }
+      estado.push(h("span", { text: now < fin
+        ? "Se mide hasta el " + fechaDMA(fin) + " (" + (10 - pasados === 1 ? "queda 1 día" : "quedan " + (10 - pasados) + " días") + ")"
+        : "Ya pasaron los 10 días: el resultado llega con el próximo escaneo" }));
+    }
+    const stats = h("div", { class: "day-stats" },
+      h("span", null, "Vela del ", h("b", { text: dayTitle(entry.fecha) })),
+      h("span", null, h("b", { text: String(resumen ? resumen.monedas : 0) }), " monedas por " + CRITS[grupo]),
+      ...estado,
+      entry.reconstruida ? h("span", { class: "badge", title: "Calculada después, solo con lo que se sabía el día del escaneo", text: "Reconstruida" }) : null);
+    const card = h("article", { class: "day" }, h("header", { class: "day-head" }, toggle, stats));
+    if (!open) return card;
+    if (!dia) {
+      card.append(h("p", { class: "gh-note", style: "padding: 0 14px 12px", text: "No se pudo cargar esta predicción." }));
+      return card;
+    }
+    if (!coins.length) {
+      card.append(h("p", { class: "gh-note", style: "padding: 0 14px 12px", text: "Ninguna moneda con huella por esta medida." }));
+      return card;
+    }
+    const enCurso = !terminado;
     const table = h("table", { class: "coins pred" });
     table.append(h("thead", null, h("tr", null,
       h("th", { class: "r", text: "#" }),
@@ -2497,17 +2589,24 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
       h("th", { class: "r", text: "Mín→Máx" }),
       h("th", { class: "r", text: "Apert→Cierre" }),
       h("th", { text: "Se parece a", title: "Las tres explosiones pasadas más parecidas y cuánto subieron en los 10 días siguientes" }),
-      h("th", { class: "r", text: "Precio actual" }),
-      h("th", { class: "r", text: "Desde el escaneo", title: "Variación del precio actual respecto al cierre de la vela (el momento del escaneo)" }))));
+      h("th", { class: "r", text: enCurso ? "Máx después" : "Máx en 10 días", title: "Precio más alto desde el escaneo, respecto al cierre de la vela; acierta si llega a +50 %" }),
+      enCurso ? h("th", { class: "r", text: "Desde el escaneo", title: "Variación del precio actual respecto al cierre de la vela (el momento del escaneo)" }) : null)));
     const tbody = h("tbody");
-    coins.forEach((c, i) => {
+    visibles.forEach((c, i) => {
       const parecidas = c.vecinas.map(([sym, mercado, esc, max]) => h("span", { class: "pred-like" + (max >= 50 ? " up" : ""),
         title: sym + " (" + (MARKET_NAMES[mercado] || mercado) + "), vela del " + dayTitle(labelOf(esc - DAY)) + ": máximo " + fmtPct(max) + " en 10 días",
         text: sym.replace(/USDT$/, "") + " " + shortDate(labelOf(esc - DAY)) + " " + fmtPct(max) }));
-      const precios = track.prices[c.mercado];
-      const ahora = precios ? precios.get(c.simbolo) : null;
-      const desde = ahora != null && c.close ? (ahora / c.close - 1) * 100 : null;
-      const tr = h("tr", { tabindex: "0", title: "Ver el gráfico de " + c.simbolo },
+      let maxCell;
+      if (enCurso) {
+        maxCell = rangeCell(c, "high");
+      } else {
+        const m = c.max_despues;
+        maxCell = h("td", { class: "r num c-high " + (m == null ? "miss" : m >= 50 ? "hit" : ""), "data-label": "Máx en 10 días",
+          title: m == null ? "Sin resultado (el par ya no cotiza)" : m >= 50 ? "Acertó: llegó a +50 %" : "No llegó a +50 %",
+          text: m == null ? "—" : fmtPct(m) + (m >= 50 ? " ✓" : "") });
+      }
+      const desde = c.ahora != null && c.close ? (c.ahora / c.close - 1) * 100 : null;
+      const tr = h("tr", { tabindex: "0", title: "Ver el gráfico de " + c.simbolo, "data-key": rangeKey(c) },
         h("td", { class: "r num c-rank", text: String(i + 1) }),
         h("td", { class: "c-coin" }, h("span", { class: "coin" }, c.base || c.simbolo, h("small", { text: c.quote ? "/" + c.quote : "" })),
           h("span", { class: "badge", text: MARKET_NAMES[c.mercado] || c.mercado })),
@@ -2516,31 +2615,32 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
         h("td", { class: "r num hot c-rango", "data-label": "Mín→Máx", text: fmtPct(c.pct_rango) }),
         h("td", { class: "r num c-cuerpo " + (c.pct_cuerpo >= 0 ? "up" : "down"), "data-label": "Apert→Cierre", text: fmtPct(c.pct_cuerpo) }),
         h("td", { class: "c-sim", "data-label": "Se parece a" }, ...parecidas),
-        h("td", { class: "r num c-now", "data-label": "Ahora", text: ahora == null ? "—" : fmtPrice(ahora) }),
-        h("td", { class: "r num c-max " + (desde == null ? "" : desde >= 0 ? "up" : "down"), "data-label": "Desde el escaneo" },
-          desde == null ? "—" : fmtPct(desde), changeBar(desde)));
-      const open = () => openTrackedChart(coins, i);
-      tr.addEventListener("click", open);
-      tr.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } });
+        maxCell,
+        enCurso ? h("td", { class: "r num c-max " + (desde == null ? "" : desde >= 0 ? "up" : "down"), "data-label": "Desde el escaneo",
+          title: c.ahora == null ? "Sin precio actual" : "Precio actual " + fmtPrice(c.ahora) + " frente al cierre de la vela " + fmtPrice(c.close) },
+          desde == null ? "—" : fmtPct(desde), changeBar(desde)) : null);
+      tr._coin = c;
+      const abrir = () => openTrackedChart(visibles, i);
+      tr.addEventListener("click", abrir);
+      tr.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); abrir(); } });
       tbody.append(tr);
     });
     table.append(tbody);
-    return h("article", { class: "day" }, head,
-      coins.length ? h("div", { class: "day-body" }, table) : h("p", { class: "gh-note", style: "padding: 0 14px 12px", text: "Ninguna moneda con huella por esta medida." }));
+    card.append(h("div", { class: "day-body" }, table));
+    if (coins.length > PRED_TOP) {
+      const mas = h("button", { class: "btn small", type: "button", text: todas ? "Ver solo las " + PRED_TOP + " primeras" : "Ver las " + coins.length + " monedas" });
+      mas.addEventListener("click", () => { if (todas) pred.todas.delete(entry.fecha); else pred.todas.add(entry.fecha); renderPrediccion(); });
+      card.append(h("div", { class: "pred-more" }, mas));
+    }
+    return card;
   }
   function predStatsCard(indice) {
     const grupo = pred.grupo;
     const prueba = indice.prueba && indice.prueba.grupos[grupo];
-    const vivo = indice.en_vivo && indice.en_vivo[grupo];
     const box = h("div", { class: "pred-stats" });
-    if (vivo) {
-      box.append(h("p", null, h("b", { text: "En tus días del seguimiento" }), " (" + vivo.dias + " días con resultado, " + vivo.monedas + " monedas): de media llegó a +50 % el ",
-        h("b", { text: pctEntero(vivo.base) }), "; de las 5 mejor puntuadas de cada día, el ", h("b", { class: "up", text: pctEntero(vivo.top5) }),
-        " (eligiendo solo las velas más grandes: " + pctEntero(vivo.top5_velas_grandes) + "); la primera del día llegó el " + pctEntero(vivo.mejor_del_dia) + " de los días."));
-    }
     if (prueba) {
       box.append(h("p", null, h("b", { text: "Prueba hacia atrás desde " + indice.prueba.desde.slice(0, 4) }),
-        " (" + prueba.explosiones.toLocaleString("es-ES") + " explosiones en " + prueba.dias + " días, sin mirar el futuro): de media llegó el ",
+        " (" + prueba.explosiones.toLocaleString("es-ES") + " explosiones en " + prueba.dias + " días, sin mirar el futuro): de media llegó a +50 % el ",
         h("b", { text: pctEntero(prueba.base) }), "; de las 5 mejor puntuadas de cada día, el ", h("b", { class: "up", text: pctEntero(prueba.top5.combinada) }),
         " (solo la huella: " + pctEntero(prueba.top5.huella) + "; solo las velas más grandes: " + pctEntero(prueba.top5.velas_grandes) + ")."));
       const t = h("table", { class: "coins" });
@@ -2555,7 +2655,7 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
     }
     box.append(h("p", { class: "gh-note", text: "No es una garantía: la mayoría de las monedas mejor puntuadas no llega a +50 %, y las que suben mucho " +
       "también caen mucho. Solo cuentan los pares que Binance tiene hoy (los retirados no están en la biblioteca)." }));
-    return h("article", { class: "day" }, h("header", { class: "day-head" }, h("h2", { text: "¿Acierta? (" + CRITS[grupo] + ")" })), box);
+    return h("article", { class: "day" }, h("header", { class: "day-head" }, h("h2", { text: "Prueba hacia atrás (" + CRITS[grupo] + ")" })), box);
   }
   function refreshPredPrices() {
     $("pred-status").textContent = "Actualizando precios…";

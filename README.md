@@ -113,11 +113,20 @@ escanear**, que la sustituye por la medida del día completo.
 
 ### Predicción
 
-Las monedas del **último escaneo** que pueden subir en los **próximos 10 días**: para cada una busca explosiones
-pasadas cuyos movimientos **antes del escaneo** se parecen y mira cuántas de ellas subieron después. Al lado, el
-precio actual y cuánto lleva desde el escaneo (se actualiza cada minuto). Los escaneos anteriores no se listan:
-solo sirven para medir si acierta. La calcula cada día el workflow **Predicción**
-(`python -m scanner_pump.prediccion`) y la guarda en `datos/prediccion/AAAA-MM-DD.json`.
+Un **historial de predicciones**, una por día: «Predicción del 08-11-2026» (la del escaneo de la vela del 6 de
+noviembre), la del 09-11-2026 al día siguiente, y así. Cada una lista las monedas de ese escaneo que pueden subir
+**+50 % en los 10 días siguientes**: para cada moneda busca explosiones pasadas cuyos movimientos **antes del
+escaneo** se parecen y mira cuántas de ellas subieron después. Se ven las 10 mejor puntuadas (con un botón para
+verlas todas) y, mientras corren los 10 días, el máximo desde el escaneo y cuánto lleva ahora (cada minuto).
+Pasados los 10 días queda el resultado: el máximo de esos 10 días y si llegó a +50 % (✓).
+
+- **Tasa de acierto:** arriba del todo, de las 5 mejor puntuadas de cada predicción terminada, cuántas llegaron a
+  +50 %, frente a la media de todas las monedas del día. Las **predicciones del día** (calculadas el mismo día del
+  escaneo, desde el 08-11-2026) se cuentan aparte de las **reconstruidas** (del 1 de octubre al 6 de noviembre,
+  calculadas después pero solo con lo que se sabía cada día); la que vale es la primera.
+
+La calcula cada día el workflow **Predicción** (`python -m scanner_pump.prediccion`) y la guarda en
+`datos/prediccion/AAAA-MM-DD.json` (con la fecha de la vela y la hora a la que se calculó).
 
 - **La huella** de una moneda son sus velas de 2H, 4H, 8H y 12H hasta el escaneo (el cierre de la vela de la
   explosión, 19:00 hora Lima), 84 de cada una (7, 14, 28 y 42 días): la forma del precio, cómo se reparte el
