@@ -1,13 +1,17 @@
 name: Predicción
 
-# Después de cada «Escaneo diario»: pone al día las velas de 2H de todos los pares (en la caché de Actions; no van
-# al repositorio), reconstruye las explosiones desde 2023 con su resultado a 10 días, puntúa las monedas del último
-# día del seguimiento y guarda datos/prediccion/AAAA-MM-DD.json (y el resultado de las predicciones que ya
-# cumplieron 10 días). Cada lunes repite la prueba hacia atrás (datos/prediccion/prueba.json).
+# Cada día, al cierre de la vela diaria: pone al día las velas de 2H de todos los pares (en la caché de Actions; no
+# van al repositorio), reconstruye la rejilla de todas las monedas desde 2023 con lo que pasó después, busca las que
+# aún no explotaron y tienen la huella de una vela de análisis, y guarda datos/prediccion/AAAA-MM-DD.json (y lo que
+# ya se sabe de las predicciones anteriores: la vela siguiente y el máximo a 10 días).
+# Corre a las 00:25 UTC y también después de cada «Escaneo diario» (GitHub a veces retrasa los horarios): la segunda
+# vez solo completa resultados. Si un día no corrió, la siguiente vez calcula también los que falten (hasta 5 días).
 # La primera vez (o si la caché se borra, tras 7 días sin usarse) descarga todo el historial: hasta unos 35 minutos.
 #
-# También a mano: Actions → Predicción → Run workflow (se pueden elegir días del seguimiento).
+# También a mano: Actions → Predicción → Run workflow (se pueden elegir velas de análisis o repetir la prueba).
 on:
+  schedule:
+    - cron: "25 0 * * *"  # 00:25 UTC = 19:25 hora Lima, después del cierre de la vela
   workflow_run:
     workflows: ["Escaneo diario"]
     types: [completed]
@@ -15,11 +19,11 @@ on:
   workflow_dispatch:
     inputs:
       fecha:
-        description: "Días del seguimiento a predecir (AAAA-MM-DD, separados por espacios). Vacío = el último"
+        description: "Velas de análisis a predecir (AAAA-MM-DD, hora Lima, separadas por espacios). Vacío = la última"
         required: false
         default: ""
       probar:
-        description: "Repetir la prueba hacia atrás"
+        description: "Repetir la prueba hacia atrás (unos 15 minutos más)"
         type: boolean
         default: false
 
@@ -32,7 +36,7 @@ concurrency:
 
 jobs:
   predecir:
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion != 'cancelled'
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion != 'cancelled'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
@@ -58,7 +62,7 @@ jobs:
         run: |
           args=()
           if [ -n "$FECHA" ]; then args+=(--fecha $FECHA); fi
-          if [ "$PROBAR" = "true" ] || [ "$(date -u +%u)" = "1" ]; then args+=(--probar); fi
+          if [ "$PROBAR" = "true" ]; then args+=(--probar); fi
           python -m scanner_pump.prediccion "${args[@]}" 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Guardar

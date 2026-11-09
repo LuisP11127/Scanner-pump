@@ -1,9 +1,12 @@
-"""Predicción: monedas del escaneo cuyos movimientos antes del escaneo se parecen a los de las que después subieron.
+"""Predicción: monedas que aún no explotaron cuya vela de análisis se parece a la de las que después subieron.
 
-**La huella.** Para cada moneda escaneada (vela diaria con +10 % o más) se toman las velas de 2H, 4H, 8H y 12H
-hasta el momento del escaneo (el cierre de la vela de la explosión, 00:00 UTC = 19:00 hora Lima), 84 velas de
-cada una (7, 14, 28 y 42 días). Las de 4H, 8H y 12H se construyen con las de 2H, que empiezan a las 00:00 UTC
-igual que las de Binance. De cada temporalidad salen:
+**La idea.** En el seguimiento, la vela de análisis es la del día anterior a la explosión: la moneda todavía no
+subió. Cada día, al cierre de la vela diaria (00:00 UTC = 19:00 hora Lima), se revisan **todas** las monedas de
+Binance que aún no explotaron (su vela del día subió menos de 10 % de mínimo a máximo) y se buscan las que
+se parecen a lo que tenían, en su vela de análisis, las que luego subieron +50 %.
+
+**La huella.** Las velas de 2H, 4H, 8H y 12H hasta el cierre, 84 de cada una (7, 14, 28 y 42 días); las de 4H, 8H y
+12H se construyen con las de 2H, que empiezan a las 00:00 UTC igual que las de Binance. De cada temporalidad salen:
 
 - la forma del precio (el cierre de cada tramo frente al último cierre, en 12 puntos);
 - el volumen (cómo se reparte a lo largo del tramo, en 6 puntos);
@@ -11,14 +14,13 @@ igual que las de Binance. De cada temporalidad salen:
 - los **fractales** de 5 velas (un techo es una vela con el máximo más alto que las dos anteriores y las dos
   siguientes; un suelo, con el mínimo más bajo): cuántos hay, si los suelos y los techos van subiendo, la
   distancia del precio al último techo y al último suelo, y si ya rompió el último techo. Solo cuentan los
-  fractales confirmados antes del escaneo (los de las dos últimas velas aún no lo están).
+  fractales confirmados antes del cierre (los de las dos últimas velas aún no lo están).
 
-**El resultado.** Llegó si el máximo de los 10 días siguientes al escaneo sube +50 % sobre el cierre de la vela de
-la explosión (lo que en el seguimiento es «Máx después», con un plazo de 10 días).
+**La biblioteca.** Todas las monedas cada 2 días desde 2023 con lo que pasó después: si el máximo de los 10 días
+siguientes subió +50 % sobre el cierre. Se compara con todas, también con las que no subieron: una huella que
+tienen muchas ganadoras pero también muchas que no subieron no puntúa alto.
 
-**La puntuación.** De las ``VECINAS`` explosiones pasadas (ya con resultado) cuya huella más se parece, qué parte
-llegó a +50 %. Se compara con todas, también con las que no subieron: una huella que tienen muchas ganadoras pero
-también muchas que no subieron no puntúa alto.
+**La puntuación.** De las 100 situaciones pasadas (ya con resultado) más parecidas, qué parte llegó a +50 %.
 """
 
 from __future__ import annotations
@@ -43,7 +45,6 @@ PUNTOS_FORMA = 12
 PUNTOS_VOLUMEN = 6
 VENTANA_DIAS = 10
 OBJETIVO = 50.0  # %
-VECINAS = 50
 ESCALARES = ["volatilidad", "tendencia", "techos", "suelos", "suelos_suben", "techos_suben", "dist_techo",
              "dist_suelo", "rompe_techo"]
 
@@ -125,58 +126,6 @@ def huella(t: np.ndarray, ohlcv: np.ndarray, escaneo: int,
     return out if np.isfinite(out).all() else None
 
 
-def explosiones(t: np.ndarray, ohlcv: np.ndarray, min_pct: float = 10.0) -> list[dict]:
-    """Velas diarias (de las de 2H) con +``min_pct`` % de mínimo a máximo o de apertura a cierre, y el máximo de
-    los 10 días siguientes al escaneo frente al cierre (``None`` si aún no pasaron)."""
-    td, vd = agrupar(t, ohlcv, 12)
-    out = []
-    for i, (abre, (o, h, l, c, v)) in enumerate(zip(td, vd)):
-        rango, cuerpo = (h / l - 1) * 100 if l > 0 else 0.0, (c / o - 1) * 100 if o > 0 else 0.0
-        if rango < min_pct and cuerpo < min_pct:
-            continue
-        escaneo = int(abre) + DIA_MS
-        despues = vd[i + 1:i + 1 + VENTANA_DIAS]
-        # Los 10 días seguidos y ya cerrados (la última vela de 2H termina después del décimo día).
-        completo = (len(despues) == VENTANA_DIAS and td[i + VENTANA_DIAS] == abre + VENTANA_DIAS * DIA_MS
-                    and t[-1] + PASO_2H >= escaneo + VENTANA_DIAS * DIA_MS)
-        maximo = (despues[:, 1].max() / c - 1) * 100 if len(despues) else None
-        out.append({"apertura": int(abre), "escaneo": escaneo, "pct_rango": float(rango), "pct_cuerpo": float(cuerpo),
-                    "cierre": float(c), "max_despues": float(maximo) if completo else None})
-    return out
-
-
-class Biblioteca:
-    """Huellas pasadas con resultado; puntúa las nuevas por sus vecinas más parecidas."""
-
-    def __init__(self, x: np.ndarray, llego: np.ndarray, info: Optional[list] = None) -> None:
-        self.media = x.mean(axis=0)
-        self.escala = x.std(axis=0) + 1e-6
-        self.x = ((x - self.media) / self.escala).astype(np.float32)
-        self.llego = llego.astype(bool)
-        self.info = info
-        self._normas = (self.x ** 2).sum(axis=1)
-
-    def vecinas(self, consultas: np.ndarray, k: Optional[int] = None) -> tuple[np.ndarray, np.ndarray]:
-        """Índices y distancias de las ``k`` huellas más parecidas a cada consulta."""
-        k = min(k or VECINAS, len(self.x))
-        q = ((consultas - self.media) / self.escala).astype(np.float32)
-        indices, distancias = [], []
-        for desde in range(0, len(q), 512):
-            bloque = q[desde:desde + 512]
-            d2 = (bloque ** 2).sum(axis=1)[:, None] + self._normas[None, :] - 2 * bloque @ self.x.T
-            idx = np.argpartition(d2, k - 1, axis=1)[:, :k]
-            orden = np.take_along_axis(d2, idx, axis=1).argsort(axis=1)
-            idx = np.take_along_axis(idx, orden, axis=1)
-            indices.append(idx)
-            distancias.append(np.sqrt(np.maximum(np.take_along_axis(d2, idx, axis=1), 0)))
-        return np.vstack(indices), np.vstack(distancias)
-
-    def puntuar(self, consultas: np.ndarray, k: Optional[int] = None) -> tuple[np.ndarray, np.ndarray]:
-        """Parte de las ``k`` vecinas que llegaron a +50 % (y los índices de las vecinas)."""
-        idx, _ = self.vecinas(consultas, k)
-        return self.llego[idx].mean(axis=1), idx
-
-
 # --- Velas de 2H en caché ------------------------------------------------------------------------------
 
 DESDE_CACHE = 1668470400000  # 15-11-2022: 42 días antes de 2023, para la huella de 12H
@@ -243,215 +192,336 @@ def actualizar_cache(carpeta: Path, ahora: Optional[int] = None, hilos: int = 8)
     return avisos
 
 
-# --- Biblioteca de explosiones pasadas -----------------------------------------------------------------
+# --- La rejilla: todas las monedas, cada 2 días desde 2023 ---------------------------------------------------
 
-DESDE_BIBLIOTECA = 1672531200000  # 2023-01-01
+DESDE_REJILLA = 1672531200000  # 2023-01-01
+PASO_REJILLA = 2 * DIA_MS
+QUIETA = 10.0  # % de mínimo a máximo: con menos, la vela de análisis aún no es una explosión
+EXPLOSION = 10.0  # % de mínimo a máximo de la vela siguiente para contar que explotó
+VECINAS = 100
+MUESTRA_NO = 4  # de las situaciones que no llegaron a +50 % la biblioteca guarda 1 de cada 4 (y pesan 4)
+TOP = 30  # monedas que se guardan de cada predicción
+HISTORIA_MIN = 45 * DIA_MS  # días de velas que necesita una moneda para tener huella
+MOVIMIENTO_MIN = 5.0  # % de mínimo a máximo en los últimos 30 días: con menos es casi una moneda estable
 
 
-def _explosiones_de(ruta: Path) -> tuple[list[dict], list[np.ndarray]]:
+def se_mueve(t: np.ndarray, v: np.ndarray, dia: int) -> bool:
+    """¿Se movió el precio en los 30 días antes de ``dia``? (descarta monedas estables o sin actividad)"""
+    mes = v[int(np.searchsorted(t, dia - 30 * DIA_MS)):int(np.searchsorted(t, dia))]
+    return len(mes) > 0 and float(mes[:, 2].min()) > 0 and (float(mes[:, 1].max()) / float(mes[:, 2].min()) - 1) * 100 >= MOVIMIENTO_MIN
+
+
+def vela_analisis(t: np.ndarray, v: np.ndarray, dia: int) -> Optional[dict]:
+    """La vela diaria que cierra en ``dia`` (00:00 UTC) hecha con las de 2H, y lo que pasó después si ya se sabe:
+    ``manana`` (de mínimo a máximo de la vela siguiente) y ``max_despues`` (máximo de los 10 días siguientes frente
+    al cierre). ``None`` si el par no cotizaba justo antes del cierre."""
+    i = int(np.searchsorted(t, dia))
+    if i == 0 or int(t[i - 1]) != dia - PASO_2H:
+        return None
+    hoy = v[int(np.searchsorted(t, dia - DIA_MS)):i]
+    if len(hoy) < 6:
+        return None
+    o, c, hi, lo = float(hoy[0, 0]), float(hoy[-1, 3]), float(hoy[:, 1].max()), float(hoy[:, 2].min())
+    if min(o, c, lo) <= 0:
+        return None
+    fila = {"apertura": dia - DIA_MS, "open": o, "high": hi, "low": lo, "close": c,
+            "volumen": round(float((hoy[:, 4] * hoy[:, 3]).sum()), 2),
+            "pct_rango": round((hi / lo - 1) * 100, 2), "pct_cuerpo": round((c / o - 1) * 100, 2),
+            "manana": None, "max_despues": None}
+    ultimo = int(t[-1]) + PASO_2H  # cierre de la última vela de la caché
+    if ultimo >= dia + DIA_MS:
+        m = v[i:int(np.searchsorted(t, dia + DIA_MS))]
+        if len(m):
+            fila["manana"] = round((float(m[:, 1].max()) / float(m[:, 2].min()) - 1) * 100, 2)
+    if ultimo >= dia + VENTANA_DIAS * DIA_MS:
+        f = v[i:int(np.searchsorted(t, dia + VENTANA_DIAS * DIA_MS))]
+        if len(f):
+            fila["max_despues"] = round((float(f[:, 1].max()) / c - 1) * 100, 2)
+    return fila
+
+
+def _muestra(simbolo: str, dia: int) -> bool:
+    """¿Entra en la biblioteca una situación que no llegó a +50 %? (1 de cada ``MUESTRA_NO``, siempre la misma)."""
+    return (int(dia // DIA_MS) + sum(map(ord, simbolo))) % MUESTRA_NO == 0
+
+
+class Rejilla:
+    """Cada par cada 2 días desde 2023 (al cierre de la vela): su huella y lo que pasó después."""
+
+    def __init__(self, pares: list[str], par: np.ndarray, dia: np.ndarray, rango: np.ndarray, manana: np.ndarray,
+                 max10: np.ndarray, x: np.ndarray) -> None:
+        self.pares, self.par, self.dia, self.rango, self.manana, self.max10, self.x = pares, par, dia, rango, manana, max10, x
+
+    def __len__(self) -> int:
+        return len(self.dia)
+
+    def biblioteca(self, hasta: int) -> "Biblioteca":
+        """Las situaciones cuyo resultado a 10 días ya se conocía en ``hasta`` (las que no subieron, muestreadas)."""
+        llego = self.max10 >= OBJETIVO
+        conocida = np.isfinite(self.max10) & (self.dia + VENTANA_DIAS * DIA_MS <= hasta)
+        muestra = np.array([_muestra(self.pares[p].split("/")[1], int(d)) for p, d in zip(self.par, self.dia)], bool)
+        sel = np.flatnonzero(conocida & (llego | muestra))
+        return Biblioteca(self.x[sel], llego[sel], np.where(llego[sel], 1.0, float(MUESTRA_NO)),
+                          [(self.pares[self.par[i]], int(self.dia[i]), float(self.max10[i])) for i in sel])
+
+
+def _rejilla_de(ruta: Path) -> tuple[list, list]:
     t, v = leer_cache(ruta)
     v = v.astype(np.float64)
-    if len(t) < 600:
+    if len(t) < 400:
         return [], []
     grupos = agrupadas(t, v)
-    filas, huellas = [], []
-    for e in explosiones(t, v):
-        if e["escaneo"] < DESDE_BIBLIOTECA or e["max_despues"] is None:
+    inicio = max(DESDE_REJILLA, (int(t[0]) // DIA_MS) * DIA_MS + HISTORIA_MIN)
+    inicio += (inicio - DESDE_REJILLA) % PASO_REJILLA
+    filas, xs = [], []
+    for dia in range(inicio, int(t[-1]) + PASO_2H + 1, PASO_REJILLA):
+        a = vela_analisis(t, v, dia)
+        if a is None or not se_mueve(t, v, dia):
             continue
-        h = huella(t, v, e["escaneo"], grupos)
-        if h is not None:
-            filas.append({"mercado": ruta.parent.name, "simbolo": ruta.stem, **e})
-            huellas.append(h)
-    return filas, huellas
+        x = huella(t, v, dia, grupos)
+        if x is None:
+            continue
+        filas.append((dia, a["pct_rango"], np.nan if a["manana"] is None else a["manana"],
+                      np.nan if a["max_despues"] is None else a["max_despues"]))
+        xs.append(x)
+    return filas, xs
 
 
-def construir_biblioteca(carpeta: Path) -> tuple[list[dict], np.ndarray]:
-    """Todas las explosiones desde 2023 de la caché que ya tienen resultado (10 días), con su huella."""
-    filas, huellas = [], []
+def construir_rejilla(carpeta: Path) -> Rejilla:
     rutas = sorted(carpeta.glob("*/*.npz"))
+    pares, par, filas, xs = [], [], [], []
     with ProcessPoolExecutor() as pool:
-        for f, h in pool.map(_explosiones_de, rutas, chunksize=8):
-            filas += f
-            huellas += h
-    return filas, (np.vstack(huellas) if huellas else np.zeros((0, len(nombres())), np.float32))
+        for ruta, (f, x) in zip(rutas, pool.map(_rejilla_de, rutas, chunksize=8)):
+            if f:
+                par += [len(pares)] * len(f)
+                pares.append(f"{ruta.parent.name}/{ruta.stem}")
+                filas += f
+                xs += x
+    a = np.array(filas, dtype=np.float64).reshape(-1, 4)
+    return Rejilla(pares, np.array(par, np.int32), a[:, 0].astype(np.int64), a[:, 1], a[:, 2], a[:, 3],
+                   np.vstack(xs).astype(np.float32) if xs else np.zeros((0, len(nombres())), np.float32))
 
 
-def _rango_del_dia(valores: np.ndarray) -> np.ndarray:
-    """Posición de cada valor entre los del día (0 a 1)."""
-    if len(valores) <= 1:
-        return np.ones(len(valores))
-    orden = valores.argsort().argsort()
-    return orden / (len(valores) - 1)
+class Biblioteca:
+    """Situaciones pasadas (huella al cierre de una vela) con su resultado: ¿subió +50 % en los 10 días siguientes?"""
+
+    def __init__(self, x: np.ndarray, llego: np.ndarray, peso: Optional[np.ndarray] = None, info: Optional[list] = None) -> None:
+        self.llego = np.asarray(llego, bool)
+        self.peso = np.ones(len(self.llego)) if peso is None else np.asarray(peso, float)
+        self.info = info or []
+        self.media = x.mean(axis=0) if len(x) else 0
+        self.escala = x.std(axis=0) + 1e-6 if len(x) else 1
+        self.x = ((x - self.media) / self.escala).astype(np.float32)
+        self.norma = (self.x ** 2).sum(axis=1)
+
+    def __len__(self) -> int:
+        return len(self.llego)
+
+    def vecinas(self, consultas: np.ndarray, k: Optional[int] = None) -> np.ndarray:
+        """Índices de las ``k`` más parecidas a cada consulta, de la más a la menos parecida."""
+        k = min(k or VECINAS, len(self))
+        q = ((consultas - self.media) / self.escala).astype(np.float32)
+        out = np.empty((len(q), k), dtype=np.int64)
+        for a in range(0, len(q), 256):
+            d = self.norma[None, :] - 2 * q[a:a + 256] @ self.x.T
+            idx = np.argpartition(d, k - 1, axis=1)[:, :k] if k < len(self) else np.tile(np.arange(len(self)), (len(d), 1))
+            orden = np.take_along_axis(d, idx, axis=1).argsort(axis=1)
+            out[a:a + 256] = np.take_along_axis(idx, orden, axis=1)
+        return out
+
+    def puntuar(self, consultas: np.ndarray, k: Optional[int] = None) -> tuple[np.ndarray, np.ndarray]:
+        """Qué parte de las parecidas llegó a +50 % (con su peso: cuentan también las que no subieron)."""
+        idx = self.vecinas(consultas, k)
+        p = self.peso[idx]
+        return (self.llego[idx] * p).sum(axis=1) / p.sum(axis=1), idx
 
 
-def combinar(parecido: np.ndarray, tamano: np.ndarray) -> np.ndarray:
-    """Puntuación del día: la mitad por la huella (cuántas parecidas subieron) y la mitad por el tamaño de la vela.
-    En la prueba desde 2024, juntas acertaron más que cada una por separado."""
-    return 0.5 * _rango_del_dia(parecido) + 0.5 * _rango_del_dia(tamano)
+# --- Predicción del día ----------------------------------------------------------------------------------------
+
+def _iso(ms: int) -> str:
+    return datetime.fromtimestamp(ms / 1000, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-GRUPOS = {"rango": ("pct_rango", "Mín→Máx"), "cuerpo": ("pct_cuerpo", "Apertura→Cierre")}
+def etiqueta(dia: int) -> str:
+    """Fecha (hora Lima) con la que Binance muestra la vela de análisis que cierra en ``dia``."""
+    from .fechas import label_of
+    return label_of(dia - DIA_MS).isoformat()
 
 
-def predecir_dia(dia: dict, carpeta: Path, filas: list[dict], x: np.ndarray) -> dict:
-    """Puntúa las monedas de un día del seguimiento con las explosiones que ya tenían resultado ese día."""
-    monedas = [c for c in dia.get("monedas", []) if c.get("apertura") and c.get("simbolo")]
-    escaneo = min((int(c["apertura"]) + DIA_MS for c in monedas), default=0)
-    conocido = np.array([f["escaneo"] + VENTANA_DIAS * DIA_MS <= escaneo for f in filas], dtype=bool)
-    out = {"fecha": dia["fecha"], "escaneo_utc": datetime.fromtimestamp(escaneo / 1000, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ") if escaneo else None,
-           "calculada": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-           "biblioteca": {"explosiones": int(conocido.sum()),
-                          "llegaron": int(sum(f["max_despues"] >= OBJETIVO for f, k in zip(filas, conocido) if k))},
-           "monedas": []}
-    con_huella, huellas = [], []
-    for c in monedas:
-        t, v = leer_cache(carpeta / c["mercado"] / f"{c['simbolo']}.npz")
-        h = huella(t, v.astype(np.float64), int(c["apertura"]) + DIA_MS) if len(t) else None
-        fila = {k: c.get(k) for k in ("mercado", "simbolo", "base", "quote", "fecha", "fecha_analisis", "apertura",
-                                      "open", "high", "low", "close", "volumen", "pct_rango", "pct_cuerpo", "analisis")}
-        fila.update({"parecido": None, "vecinas": [], "puntuacion": {}})
-        out["monedas"].append(fila)
-        if h is not None:
-            con_huella.append(fila)
-            huellas.append(h)
-    if con_huella and conocido.sum() > VECINAS:
-        indices = np.flatnonzero(conocido)
-        biblio = Biblioteca(x[indices], np.array([filas[i]["max_despues"] >= OBJETIVO for i in indices]))
-        p, vecinas = biblio.puntuar(np.vstack(huellas))
-        for fila, pi, vi in zip(con_huella, p, vecinas):
-            fila["parecido"] = round(float(pi), 4)
-            fila["vecinas"] = [[filas[indices[j]]["simbolo"], filas[indices[j]]["mercado"],
-                                filas[indices[j]]["escaneo"], round(filas[indices[j]]["max_despues"], 1)] for j in vi[:3]]
-        for grupo, (campo, _) in GRUPOS.items():
-            del_grupo = [f for f in con_huella if (f.get(campo) or 0) >= 10]
-            if del_grupo:
-                puntos = combinar(np.array([f["parecido"] for f in del_grupo]), np.array([f[campo] for f in del_grupo]))
-                for f, s in zip(del_grupo, puntos):
-                    f["puntuacion"][grupo] = round(float(s), 4)
-    return out
-
-
-PRIMERA_DEL_DIA = "2026-11-08T00:00:00Z"  # escaneo de la primera predicción calculada el mismo día
-
-
-def reconstruida(prediccion: dict) -> bool:
-    """¿Se calculó después (más de un día tras el escaneo, con los datos que había ese día) y no el mismo día?"""
-    calculada, escaneo = prediccion.get("calculada"), prediccion.get("escaneo_utc")
-    if not escaneo:
-        return True
-    if not calculada:  # las primeras del workflow diario no guardaban la hora; las reconstruidas acaban antes
-        return escaneo < PRIMERA_DEL_DIA
-    a = datetime.fromisoformat(calculada.replace("Z", "+00:00"))
-    return a - datetime.fromisoformat(escaneo.replace("Z", "+00:00")) > timedelta(days=1)
-
-
-def resumen_dia(prediccion: dict) -> dict:
-    """Por medida: cuántas monedas, cuántas de las 5 mejor puntuadas llegaron a +50 % y la media del día
-    (solo con las que ya tienen resultado a 10 días)."""
-    out = {}
-    for grupo, (campo, _) in GRUPOS.items():
-        cs = [c for c in prediccion.get("monedas", []) if grupo in (c.get("puntuacion") or {})]
-        if not cs:
+def candidatas(carpeta: Path, dia: int) -> tuple[list[dict], np.ndarray]:
+    """Las monedas cuya vela de análisis (la que cierra en ``dia``) aún no es una explosión, con su huella."""
+    monedas, xs = [], []
+    for ruta in sorted(carpeta.glob("*/*.npz")):
+        t, v = leer_cache(ruta)
+        if len(t) < 400 or int(t[0]) > dia - HISTORIA_MIN:
             continue
-        cs.sort(key=lambda c: -c["puntuacion"][grupo])
-        con = [c for c in cs if c.get("max_despues") is not None]
-        top = [c for c in cs[:5] if c.get("max_despues") is not None]
-        out[grupo] = {"monedas": len(cs), "con_resultado": len(con),
-                      "top5": {"llegaron": sum(c["max_despues"] >= OBJETIVO for c in top), "de": len(top)},
-                      "base": round(sum(c["max_despues"] >= OBJETIVO for c in con) / len(con), 4) if con else None}
+        v = v.astype(np.float64)
+        a = vela_analisis(t, v, dia)
+        if a is None or a["pct_rango"] >= QUIETA or not se_mueve(t, v, dia):
+            continue
+        x = huella(t, v, dia)
+        if x is None:
+            continue
+        simbolo = ruta.stem
+        monedas.append({"mercado": ruta.parent.name, "simbolo": simbolo, "base": simbolo[:-4], "quote": simbolo[-4:],
+                        "fecha": etiqueta(dia), **a})
+        xs.append(x)
+    return monedas, (np.vstack(xs) if xs else np.zeros((0, len(nombres())), np.float32))
+
+
+def predecir(carpeta: Path, dia: int, rejilla: Rejilla, ahora: Optional[int] = None) -> dict:
+    """Las ``TOP`` monedas que aún no explotaron cuya huella al cierre de ``dia`` más se parece a la que tenían, en
+    su vela de análisis, las que luego subieron +50 %. Solo usa lo que se sabía ese día."""
+    biblio = rejilla.biblioteca(dia)
+    monedas, x = candidatas(carpeta, dia)
+    out = {"version": 2, "fecha": etiqueta(dia), "escaneo_utc": _iso(dia),
+           "calculada": _iso(ahora or int(datetime.now(timezone.utc).timestamp() * 1000)),
+           "biblioteca": {"situaciones": len(biblio), "llegaron": int(biblio.llego.sum())},
+           "evaluadas": 0, "monedas": []}
+    if not monedas or not len(biblio):
+        return out
+    parecido, idx = biblio.puntuar(x)
+    mejor = {}
+    for i, c in enumerate(monedas):  # la misma moneda en spot y en futuros: se queda la que más se parece
+        if c["base"] not in mejor or parecido[i] > parecido[mejor[c["base"]]]:
+            mejor[c["base"]] = i
+    elegidas = sorted(mejor.values(), key=lambda i: -parecido[i])
+    out["evaluadas"] = len(mejor)
+    for i in elegidas[:TOP]:
+        c = monedas[i]
+        ganadoras = [j for j in idx[i] if biblio.llego[j]][:3] or list(idx[i][:3])
+        c["parecido"] = round(float(parecido[i]), 4)
+        c["vecinas"] = [[*biblio.info[j][0].split("/")[::-1], biblio.info[j][1], round(biblio.info[j][2], 2)] for j in ganadoras]
+        out["monedas"].append(c)
     return out
 
 
-def en_vivo(predicciones: list[dict]) -> dict:
-    """Cómo acertaron las predicciones de los días que ya tienen resultado (10 días después)."""
-    res = {}
-    for grupo, (campo, nombre) in GRUPOS.items():
-        top, grandes, mejor, base, monedas = [], [], [], [], 0
-        for pred in predicciones:
-            cs = [c for c in pred.get("monedas", []) if grupo in (c.get("puntuacion") or {}) and c.get("max_despues") is not None]
-            if len(cs) < 5:
-                continue
-            y = np.array([c["max_despues"] >= OBJETIVO for c in cs])
-            orden = np.argsort([-c["puntuacion"][grupo] for c in cs], kind="stable")
-            top.append(y[orden[:5]].mean())
-            mejor.append(float(y[orden[0]]))
-            grandes.append(y[np.argsort([-c[campo] for c in cs], kind="stable")[:5]].mean())
-            base.append(y.mean())
-            monedas += len(cs)
-        if top:
-            res[grupo] = {"nombre": nombre, "dias": len(top), "monedas": monedas, "base": round(float(np.mean(base)), 4),
-                          "top5": round(float(np.mean(top)), 4), "top5_velas_grandes": round(float(np.mean(grandes)), 4),
-                          "mejor_del_dia": round(float(np.mean(mejor)), 4)}
-    return res
-
-
-def completar_resultados(prediccion: dict, filas_por_clave: dict) -> bool:
-    """Añade el máximo de los 10 días siguientes a las monedas que ya lo tienen. Devuelve si cambió algo."""
+def completar(prediccion: dict, carpeta: Path) -> bool:
+    """Añade lo que ya se sabe de cada moneda (vela siguiente y máximo a 10 días) y, cuando se sabe, la media de
+    todas las monedas que no habían explotado ese día. Devuelve si cambió algo."""
+    dia = int(datetime.fromisoformat(prediccion["escaneo_utc"].replace("Z", "+00:00")).timestamp() * 1000)
     cambio = False
     for c in prediccion.get("monedas", []):
-        if c.get("max_despues") is not None or not c.get("apertura"):
+        if c.get("max_despues") is not None:
             continue
-        e = filas_por_clave.get((c["mercado"], c["simbolo"], int(c["apertura"]) + DIA_MS))
-        if e is not None:
-            c["max_despues"] = round(e["max_despues"], 2)
+        t, v = leer_cache(carpeta / c["mercado"] / f"{c['simbolo']}.npz")
+        a = vela_analisis(t, v.astype(np.float64), dia) if len(t) else None
+        if a:
+            for k in ("manana", "max_despues"):
+                if a[k] is not None and c.get(k) != a[k]:
+                    c[k] = a[k]
+                    cambio = True
+    base = prediccion.get("base") or {}
+    if base.get("llegaron") is None:
+        nueva = media_del_dia(carpeta, dia)
+        if nueva and nueva != base:
+            prediccion["base"] = nueva
             cambio = True
     return cambio
 
 
+def media_del_dia(carpeta: Path, dia: int) -> Optional[dict]:
+    """De todas las monedas que no habían explotado ese día: cuántas explotaron al día siguiente y cuántas llegaron
+    a +50 % en 10 días (``None`` hasta que haya pasado el día siguiente)."""
+    manana, llegaron, vistas = [], [], set()
+    for ruta in sorted(carpeta.glob("*/*.npz"), key=lambda r: (r.parent.name != "futures", r.stem)):
+        if ruta.stem[:-4] in vistas:  # cada moneda una vez aunque esté en spot y en futuros
+            continue
+        t, v = leer_cache(ruta)
+        if len(t) < 400 or int(t[0]) > dia - HISTORIA_MIN:
+            continue
+        a = vela_analisis(t, v.astype(np.float64), dia)
+        if a is None or a["pct_rango"] >= QUIETA or not se_mueve(t, v, dia):
+            continue
+        vistas.add(ruta.stem[:-4])
+        if a["manana"] is not None:
+            manana.append(a["manana"] >= EXPLOSION)
+        if a["max_despues"] is not None:
+            llegaron.append(a["max_despues"] >= OBJETIVO)
+    if not manana:
+        return None
+    return {"monedas": len(manana), "explotaron": round(float(np.mean(manana)), 4),
+            "llegaron": round(float(np.mean(llegaron)), 4) if len(llegaron) >= len(manana) * 0.9 else None}
+
+
+def reconstruida(prediccion: dict) -> bool:
+    """¿Se calculó días después del cierre de la vela (con lo que se sabía ese día) y no el mismo día?"""
+    calculada, escaneo = prediccion.get("calculada"), prediccion.get("escaneo_utc")
+    if not calculada or not escaneo:
+        return True
+    a = datetime.fromisoformat(calculada.replace("Z", "+00:00"))
+    return a - datetime.fromisoformat(escaneo.replace("Z", "+00:00")) > timedelta(days=1)
+
+
+def resumen_dia(prediccion: dict, n: int = 5) -> dict:
+    """De las ``n`` primeras: cuántas explotaron al día siguiente y cuántas llegaron a +50 % (de las que ya se sabe)."""
+    top = prediccion.get("monedas", [])[:n]
+    man = [c["manana"] >= EXPLOSION for c in top if c.get("manana") is not None]
+    lle = [c["max_despues"] >= OBJETIVO for c in top if c.get("max_despues") is not None]
+    return {"explotaron": sum(man), "de_manana": len(man), "llegaron": sum(lle), "de_10d": len(lle)}
+
+
+def en_vivo(predicciones: list[dict]) -> dict:
+    """Acierto acumulado de las 5 primeras de cada predicción, frente a la media de las monedas de esos días."""
+    r = {"dias_manana": 0, "explotaron": 0, "de_manana": 0, "base_explotaron": [],
+         "dias_10d": 0, "llegaron": 0, "de_10d": 0, "base_llegaron": []}
+    for p in predicciones:
+        s, base = resumen_dia(p), p.get("base") or {}
+        if s["de_manana"]:
+            r["dias_manana"] += 1
+            r["explotaron"] += s["explotaron"]
+            r["de_manana"] += s["de_manana"]
+            if base.get("explotaron") is not None:
+                r["base_explotaron"].append(base["explotaron"])
+        if s["de_10d"] >= 5:
+            r["dias_10d"] += 1
+            r["llegaron"] += s["llegaron"]
+            r["de_10d"] += s["de_10d"]
+            if base.get("llegaron") is not None:
+                r["base_llegaron"].append(base["llegaron"])
+    for k in ("base_explotaron", "base_llegaron"):
+        r[k] = round(float(np.mean(r[k])), 4) if r[k] else None
+    return r
+
+
 # --- Prueba hacia atrás ----------------------------------------------------------------------------------
 
-def probar(filas: list[dict], x: np.ndarray, desde: str = "2024-01-01") -> dict:
-    """Mes a mes, sin mirar el futuro: la biblioteca solo tiene las explosiones cuyo resultado se conocía 10 días
-    antes de empezar el mes. Compara la puntuación con elegir al azar y con elegir las velas más grandes."""
-    escaneo = np.array([f["escaneo"] for f in filas], dtype=np.int64)
-    llego = np.array([f["max_despues"] >= OBJETIVO for f in filas])
-    dia = escaneo // DIA_MS
-    p = np.full(len(filas), np.nan)
-    inicio = datetime.fromisoformat(desde).replace(tzinfo=timezone.utc)
-    mes = inicio
-    fin = escaneo.max() if len(escaneo) else 0
-    while int(mes.timestamp() * 1000) <= fin:
-        siguiente = (mes.replace(day=28) + timedelta(days=4)).replace(day=1)
-        a, b = int(mes.timestamp() * 1000), int(siguiente.timestamp() * 1000)
-        prueba = (escaneo >= a) & (escaneo < b)
-        conocido = escaneo + VENTANA_DIAS * DIA_MS <= a
-        if prueba.any() and conocido.sum() > VECINAS:
-            p[prueba], _ = Biblioteca(x[conocido], llego[conocido]).puntuar(x[prueba])
-        mes = siguiente
-    res = {"desde": desde, "hasta": datetime.fromtimestamp(fin / 1000, timezone.utc).date().isoformat() if fin else None,
-           "objetivo": OBJETIVO, "ventana_dias": VENTANA_DIAS, "grupos": {}}
-    for grupo, (campo, nombre) in GRUPOS.items():
-        m = ~np.isnan(p) & (np.array([f[campo] for f in filas]) >= 10)
-        if not m.any():
+def probar(rejilla: Rejilla, desde: str = "2025-01-01") -> dict:
+    """Mes a mes, sin mirar el futuro: la biblioteca solo tiene las situaciones cuyo resultado se conocía al empezar
+    el mes. Cada día de la rejilla se eligen las 5 monedas (que aún no explotaron) más parecidas a las ganadoras."""
+    inicio = int(datetime.fromisoformat(desde).replace(tzinfo=timezone.utc).timestamp() * 1000)
+    meses = sorted({datetime.fromtimestamp(d / 1000, timezone.utc).strftime("%Y-%m") for d in rejilla.dia if d >= inicio})
+    conocida = np.isfinite(rejilla.max10) & np.isfinite(rejilla.manana) & (rejilla.rango < QUIETA)
+    bases = np.array([p.split("/")[1][:-4] for p in rejilla.pares])
+    top5_lle, top5_exp, base_lle, base_exp = [], [], [], []
+    for mes in meses:
+        a = int(datetime.fromisoformat(mes + "-01").replace(tzinfo=timezone.utc).timestamp() * 1000)
+        b = int(datetime.fromisoformat((datetime.fromisoformat(mes + "-01") + timedelta(days=32)).strftime("%Y-%m-01"))
+                .replace(tzinfo=timezone.utc).timestamp() * 1000)
+        prueba = np.flatnonzero(conocida & (rejilla.dia >= a) & (rejilla.dia < b))
+        biblio = rejilla.biblioteca(a)
+        if not len(prueba) or not len(biblio):
             continue
-        g_dia, g_p, g_y = dia[m], p[m], llego[m]
-        g_t = np.array([f[campo] for f in filas])[m]
-        top = {"combinada": [], "huella": [], "velas_grandes": []}
-        mejor = {"combinada": [], "velas_grandes": []}
-        por_anio: dict[str, list] = {}
-        for d in np.unique(g_dia):
-            s = g_dia == d
-            puntos = combinar(g_p[s], g_t[s])
-            for nombre_, valores in (("combinada", puntos), ("huella", g_p[s]), ("velas_grandes", g_t[s])):
-                elegidas = np.argsort(-valores, kind="stable")[:5]
-                top[nombre_].append(g_y[s][elegidas].mean())
-                if nombre_ in mejor:
-                    mejor[nombre_].append(float(g_y[s][elegidas[0]]))
-            anio = datetime.fromtimestamp(d * 86400, timezone.utc).year
-            por_anio.setdefault(str(anio), []).append(g_y[s][np.argsort(-puntos, kind="stable")[:5]].mean())
-        tramos = [0, 0.02, 0.05, 0.1, 0.2, 0.3, 1.01]
-        calibracion = []
-        for lo, hi in zip(tramos[:-1], tramos[1:]):
-            s = (g_p >= lo) & (g_p < hi)
-            if s.any():
-                calibracion.append({"desde": lo, "hasta": min(hi, 1.0), "explosiones": int(s.sum()), "llegaron": round(float(g_y[s].mean()), 4)})
-        res["grupos"][grupo] = {
-            "nombre": nombre, "explosiones": int(m.sum()), "dias": int(len(np.unique(g_dia))), "base": round(float(g_y.mean()), 4),
-            "top5": {k: round(float(np.mean(v)), 4) for k, v in top.items()},
-            "mejor_del_dia": {k: round(float(np.mean(v)), 4) for k, v in mejor.items()},
-            "top5_por_anio": {k: round(float(np.mean(v)), 4) for k, v in por_anio.items()},
-            "calibracion": calibracion}
-    return res
+        score, _ = biblio.puntuar(rejilla.x[prueba])
+        for dia in np.unique(rejilla.dia[prueba]):
+            sel = np.flatnonzero(rejilla.dia[prueba] == dia)
+            vistos, top = set(), []
+            for j in sel[np.argsort(-score[sel], kind="stable")]:
+                base = bases[rejilla.par[prueba[j]]]
+                if base not in vistos:
+                    vistos.add(base)
+                    top.append(prueba[j])
+                if len(top) == 5:
+                    break
+            filas = prueba[sel]
+            top5_lle.append(np.mean(rejilla.max10[top] >= OBJETIVO))
+            top5_exp.append(np.mean(rejilla.manana[top] >= EXPLOSION))
+            base_lle.append(np.mean(rejilla.max10[filas] >= OBJETIVO))
+            base_exp.append(np.mean(rejilla.manana[filas] >= EXPLOSION))
+    r = lambda xs: round(float(np.mean(xs)), 4) if xs else None
+    return {"desde": desde, "dias": len(top5_lle), "situaciones": int(conocida[rejilla.dia >= inicio].sum()),
+            "base": {"llegaron": r(base_lle), "explotaron": r(base_exp)},
+            "top5": {"llegaron": r(top5_lle), "explotaron": r(top5_exp)}}
 
 
 # --- Línea de comandos -----------------------------------------------------------------------------------
@@ -468,45 +538,56 @@ def _escribir_json(ruta: Path, datos: dict) -> None:
     ruta.write_text(json.dumps(datos, ensure_ascii=False, separators=(",", ":")) + "\n", encoding="utf-8")
 
 
+def _dia_de(fecha: str) -> int:
+    """Cierre (00:00 UTC) de la vela de análisis con esa fecha (hora Lima)."""
+    from .fechas import open_of
+    return open_of(datetime.fromisoformat(fecha).date()) + DIA_MS
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m scanner_pump.prediccion", description=__doc__.splitlines()[0])
-    parser.add_argument("--seguimiento", type=Path, default=Path("datos/seguimiento"))
     parser.add_argument("--salida", type=Path, default=Path("datos/prediccion"))
     parser.add_argument("--cache", type=Path, default=Path("cache/velas-2h"), help="velas de 2H (no van al repositorio)")
-    parser.add_argument("--fecha", nargs="*", default=[], help="días del seguimiento a predecir (por defecto, el último)")
+    parser.add_argument("--fecha", nargs="*", default=[],
+                        help="velas de análisis a predecir (AAAA-MM-DD, hora Lima; por defecto la última y las que falten)")
     parser.add_argument("--probar", action="store_true", help="repetir la prueba hacia atrás (prueba.json)")
     parser.add_argument("--sin-actualizar", action="store_true", help="no pedir velas nuevas a Binance")
     args = parser.parse_args(argv)
 
-    avisos = [] if args.sin_actualizar else actualizar_cache(args.cache)
-    filas, x = construir_biblioteca(args.cache)
-    print(f"Biblioteca: {len(filas)} explosiones con resultado, "
-          f"{sum(f['max_despues'] >= OBJETIVO for f in filas)} llegaron a +{OBJETIVO:.0f} %", file=sys.stderr)
-    dias = sorted(p.stem for p in args.seguimiento.glob("*.json") if re.fullmatch(r"\d{4}-\d{2}-\d{2}", p.stem))
-    pedidas = args.fecha or dias[-1:]
-    for fecha in pedidas:
-        dia = _leer_json(args.seguimiento / f"{fecha}.json")
-        if not dia:
-            avisos.append(f"no hay seguimiento del {fecha}")
-            continue
-        pred = predecir_dia(dia, args.cache, filas, x)
-        _escribir_json(args.salida / f"{fecha}.json", pred)
-        print(f"Predicción del {fecha}: {sum(c['parecido'] is not None for c in pred['monedas'])} de "
-              f"{len(pred['monedas'])} monedas con huella")
-    # Resultados a 10 días de las predicciones anteriores
-    por_clave = {(f["mercado"], f["simbolo"], f["escaneo"]): f for f in filas}
+    ahora = int(datetime.now(timezone.utc).timestamp() * 1000)
+    avisos = [] if args.sin_actualizar else actualizar_cache(args.cache, ahora)
+    rejilla = construir_rejilla(args.cache)
+    print(f"Rejilla: {len(rejilla)} situaciones de {len(rejilla.pares)} pares desde 2023", file=sys.stderr)
+    # Las predicciones de antes (de otra versión) se descartan
+    hechas = {}
     for ruta in sorted(args.salida.glob("*.json")):
-        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", ruta.stem):
-            continue
-        pred = _leer_json(ruta)
-        if pred and "monedas" in pred and completar_resultados(pred, por_clave):
-            _escribir_json(ruta, pred)
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", ruta.stem):
+            p = _leer_json(ruta)
+            if not p or p.get("version") != 2:
+                ruta.unlink()
+            else:
+                hechas[ruta.stem] = p
+    ultimo = (ahora // DIA_MS) * DIA_MS  # cierre de la última vela diaria
+    if args.fecha:
+        dias = [_dia_de(f) for f in args.fecha]
+    else:  # la última y las que falten de los 5 días anteriores (si el workflow no corrió)
+        dias = [d for d in range(ultimo - 5 * DIA_MS, ultimo + 1, DIA_MS) if etiqueta(d) not in hechas]
+    for dia in dias:
+        pred = predecir(args.cache, dia, rejilla, ahora)
+        completar(pred, args.cache)
+        _escribir_json(args.salida / f"{pred['fecha']}.json", pred)
+        hechas[pred["fecha"]] = pred
+        print(f"Predicción del {_iso(dia)[:10]} (vela de análisis del {pred['fecha']}): {pred['evaluadas']} monedas sin "
+              f"explotar; primeras: {', '.join(c['simbolo'] for c in pred['monedas'][:5])}")
+    for fecha, pred in hechas.items():  # lo que ya se sabe de las anteriores
+        if completar(pred, args.cache):
+            _escribir_json(args.salida / f"{fecha}.json", pred)
     if args.probar:
-        res = probar(filas, x)
+        res = probar(rejilla)
         _escribir_json(args.salida / "prueba.json", res)
-        for g in res["grupos"].values():
-            print(f"Prueba {g['nombre']}: base {g['base']:.1%}; las 5 mejores de cada día llegaron "
-                  f"{g['top5']['combinada']:.1%} (velas grandes {g['top5']['velas_grandes']:.1%})")
+        print(f"Prueba desde {res['desde']}: de las 5 primeras de cada día llegaron a +{OBJETIVO:.0f} % el "
+              f"{res['top5']['llegaron']:.1%} (media {res['base']['llegaron']:.1%}); explotaron al día siguiente el "
+              f"{res['top5']['explotaron']:.1%} (media {res['base']['explotaron']:.1%})")
     for aviso in avisos:
         print(f"Aviso: {aviso}", file=sys.stderr)
     return 0

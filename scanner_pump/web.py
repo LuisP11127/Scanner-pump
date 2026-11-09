@@ -49,6 +49,8 @@ def write_predictions(source: Path, dest: Path, generated: str) -> None:
             day = json.loads(path.read_text(encoding="utf-8"))
         except ValueError:
             continue
+        if day.get("version") != 2:  # de la versión anterior (monedas que ya habían explotado)
+            continue
         days.append(day)
         dest.mkdir(parents=True, exist_ok=True)
         write_json(dest / path.name, day)
@@ -59,16 +61,15 @@ def write_predictions(source: Path, dest: Path, generated: str) -> None:
         test = json.loads((source / "prueba.json").read_text(encoding="utf-8"))
     except (OSError, ValueError):
         test = None
-    # Por fecha de escaneo, la más reciente primero. Las reconstruidas (calculadas días después, con los datos que
+    # Por fecha, la más reciente primero. Las reconstruidas (calculadas días después, con los datos que
     # había ese día) se miden aparte de las que se calcularon el mismo día.
     days.sort(key=lambda d: d.get("escaneo_utc") or d["fecha"], reverse=True)
     index = {"generado": generated, "prueba": test,
              "en_vivo": {"reales": en_vivo([d for d in days if not reconstruida(d)]),
                          "reconstruidas": en_vivo([d for d in days if reconstruida(d)])},
              "dias": [{"fecha": d["fecha"], "escaneo_utc": d.get("escaneo_utc"), "reconstruida": reconstruida(d),
-                       "monedas": len(d.get("monedas", [])),
-                       "con_resultado": sum(c.get("max_despues") is not None for c in d.get("monedas", [])),
-                       "grupos": resumen_dia(d)} for d in days]}
+                       "evaluadas": d.get("evaluadas", 0), "monedas": len(d.get("monedas", [])),
+                       "top5": resumen_dia(d), "base": d.get("base")} for d in days]}
     write_json(dest / "indice.json", index)
     print(f"{len(days)} días de predicción en {dest}")
 
