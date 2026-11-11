@@ -147,7 +147,11 @@ Cómo se calcula (`python -m scanner_pump.prediccion`, workflow **Predicción**;
 - **Parecidas que acertaron:** de las 100 situaciones pasadas más parecidas (cuyo resultado ya se conocía ese
   día), qué parte acertó. Cuentan también las que no: una huella frecuente entre las que acertaron pero también
   entre las que no, no puntúa alto. Al lado salen tres parecidas que acertaron, con su vela de análisis.
-- **¿Acierta?** PRUEBA_TEXTO
+- **¿Acierta?** En la prueba hacia atrás (mes a mes desde 2025, sin mirar el futuro, unas 180 000 velas de
+  monedas que aún no habían explotado), de las 5 primeras de cada día **acertaron** (explotaron al día siguiente y
+  subieron +50 %) el 7,7 %, frente a una media del 1,3 %: unas 6 veces más que al azar. Por separado, explotaron
+  al día siguiente el 48 % (media 18 %) y llegaron a +50 % el 11,4 % (media 3,8 %). No es una garantía: la mayoría
+  de las monedas de la lista no acierta.
 
 ## GitHub Actions
 
