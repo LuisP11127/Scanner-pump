@@ -118,16 +118,18 @@ antes de explotar, las monedas que luego subieron **+50 %**. Cada día, al cierr
 revisan **todas** las monedas de Binance cuya vela del día subió menos de 10 % de mínimo a máximo (las que se
 movieron menos de 5 % en el último mes, casi estables, no cuentan) y quedan las 30 más parecidas.
 
-Es un **historial**, una predicción por día: «Predicción del 09-11-2026» (al cierre de la vela del 7 de noviembre
-en hora Lima), la del 10-11-2026 al día siguiente, y así. Se ven las 10 primeras (con un botón para ver las 30) y,
-de cada una, lo que pasó después:
+Es un **historial**, una predicción por día, con la fecha de su vela de análisis (como la muestra Binance en hora
+Lima): la «Predicción del 07-11-2026» usa la vela del 7 de noviembre, que va del 7 a las 19:00 al 8 a las 19:00, y
+se calcula en cuanto esa vela cierra; la del 08-11-2026 al día siguiente, y así. No puede usar una vela más nueva:
+la siguiente aún no ha cerrado. Se ven las 10 primeras (con un botón para ver las 30) y, de cada una, lo que pasó
+después:
 
 - **Día siguiente:** la vela siguiente de mínimo a máximo; ✓ si explotó (+10 % o más).
 - **Máx después / Máx en 10 días:** el precio más alto desde el cierre de la vela de análisis, en vivo mientras
   corren los 10 días; ✓ si llegó a +50 %.
 - **Tasa de acierto** (arriba): de las 5 primeras de cada día, cuántas explotaron al día siguiente y cuántas
   llegaron a +50 % en 10 días, frente a la media de todas las monedas sin explotar de esos días. Las
-  **predicciones del día** (calculadas al cierre, desde el 09-11-2026) se cuentan aparte de las **reconstruidas**
+  **predicciones del día** (calculadas al cierre de la vela, desde la del 07-11-2026) se cuentan aparte de las **reconstruidas**
   (velas de análisis del 30 de septiembre al 6 de noviembre, calculadas después pero solo con lo que se sabía
   cada día); la que vale es la primera.
 
