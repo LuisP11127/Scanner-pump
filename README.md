@@ -113,23 +113,26 @@ escanear**, que la sustituye por la medida del día completo.
 
 ### Predicción
 
-Busca la **vela de análisis**: monedas que **todavía no explotaron** pero que tienen la huella que tenían, el día
-antes de explotar, las monedas que luego subieron **+50 %**. Cada día, al cierre de la vela (19:00 hora Lima), se
-revisan **todas** las monedas de Binance cuya vela del día subió menos de 10 % de mínimo a máximo (las que se
-movieron menos de 5 % en el último mes, casi estables, no cuentan) y quedan las 30 más parecidas.
+Predice la **explosión**: al cierre de la vela de análisis (el día antes), las monedas que **todavía no explotaron**
+pero que mañana harán su vela de explosión (+10 %) y desde ese momento subirán **+50 %**. Cada día, al cierre de la
+vela (19:00 hora Lima), se revisan **todas** las monedas de Binance cuya vela del día subió menos de 10 % de mínimo
+a máximo (las que se movieron menos de 5 % en el último mes, casi estables, no cuentan) y quedan las 30 cuya huella
+más se parece a la que tenían, el día antes de explotar, las monedas que lo hicieron.
 
-Es un **historial**, una predicción por día: «Predicción del 09-11-2026» (al cierre de la vela del 7 de noviembre
-en hora Lima), la del 10-11-2026 al día siguiente, y así. Se ven las 10 primeras (con un botón para ver las 30) y,
-de cada una, lo que pasó después:
+Es un **historial**, una predicción por día, con la fecha de su vela de análisis (como la muestra Binance en hora
+Lima): la «Predicción del 07-11-2026» usa la vela del 7 de noviembre, que va del 7 a las 19:00 al 8 a las 19:00, y
+se calcula en cuanto esa vela cierra; la del 08-11-2026 al día siguiente, y así. No puede usar una vela más nueva:
+la siguiente aún no ha cerrado. Se ven las 10 primeras (con un botón para ver las 30) y, de cada una, lo que pasó
+después:
 
 - **Día siguiente:** la vela siguiente de mínimo a máximo; ✓ si explotó (+10 % o más).
-- **Máx después / Máx en 10 días:** el precio más alto desde el cierre de la vela de análisis, en vivo mientras
-  corren los 10 días; ✓ si llegó a +50 %.
-- **Tasa de acierto** (arriba): de las 5 primeras de cada día, cuántas explotaron al día siguiente y cuántas
-  llegaron a +50 % en 10 días, frente a la media de todas las monedas sin explotar de esos días. Las
-  **predicciones del día** (calculadas al cierre, desde el 09-11-2026) se cuentan aparte de las **reconstruidas**
-  (velas de análisis del 30 de septiembre al 6 de noviembre, calculadas después pero solo con lo que se sabía
-  cada día); la que vale es la primera.
+- **Máx después / Máx en 10 días:** el precio más alto desde el cierre de la vela de análisis (cuando empieza la
+  explosión), en vivo mientras corren los 10 días; ✓ si **acertó**: explotó al día siguiente y llegó a +50 %.
+- **Tasa de acierto** (arriba): de las 5 primeras de cada día, cuántas **acertaron** (explotaron al día siguiente
+  y desde ahí subieron +50 % en 10 días), frente a la media de todas las monedas sin explotar de esos días; y, por
+  separado, cuántas explotaron y cuántas llegaron a +50 %. Las **predicciones del día** (calculadas al cierre de la
+  vela) se cuentan aparte de las **reconstruidas** (calculadas después, pero solo con lo que se sabía cada día); la
+  que vale es la primera.
 
 Cómo se calcula (`python -m scanner_pump.prediccion`, workflow **Predicción**; se guarda en
 `datos/prediccion/AAAA-MM-DD.json` con la fecha de la vela de análisis):
@@ -139,13 +142,16 @@ Cómo se calcula (`python -m scanner_pump.prediccion`, workflow **Predicción**;
   velas (techos y suelos: cuántos hay, si van subiendo, la distancia al último y si ya rompió el último techo).
   Solo cuentan los fractales confirmados antes del cierre.
 - **La biblioteca:** todas las monedas que hoy tiene Binance, cada 2 días desde 2023 (unas 400 000 situaciones),
-  con lo que pasó después: si el máximo de los **10 días siguientes** subió **+50 %** sobre el cierre.
-- **Parecidas que subieron:** de las 100 situaciones pasadas más parecidas (cuyo resultado ya se conocía ese día),
-  qué parte subió +50 %. Cuentan también las que no subieron: una huella frecuente entre las que subieron pero
-  también entre las que no, no puntúa alto. Al lado salen tres parecidas que subieron, con su vela de análisis.
-- **¿Acierta?** En la prueba hacia atrás (mes a mes desde 2025, sin mirar el futuro, unas 180 000 velas de monedas que
-  aún no habían explotado), de las 5 primeras de cada día explotaron al día siguiente el 39 % (media del día: 18 %)
-  y llegaron a +50 % en 10 días el 9,3 % (media: 3,8 %): unas 2,5 veces más que al azar. No es una garantía: la mayoría de las monedas de la lista no llega a +50 %.
+  con lo que pasó después: **acertó** si la vela siguiente fue una explosión (+10 % de mínimo a máximo) y el máximo
+  de los **10 días siguientes** subió **+50 %** sobre el cierre de la vela de análisis (cuando empieza la explosión).
+- **Parecidas que acertaron:** de las 100 situaciones pasadas más parecidas (cuyo resultado ya se conocía ese
+  día), qué parte acertó. Cuentan también las que no: una huella frecuente entre las que acertaron pero también
+  entre las que no, no puntúa alto. Al lado salen tres parecidas que acertaron, con su vela de análisis.
+- **¿Acierta?** En la prueba hacia atrás (mes a mes desde 2025, sin mirar el futuro, unas 180 000 velas de
+  monedas que aún no habían explotado), de las 5 primeras de cada día **acertaron** (explotaron al día siguiente y
+  subieron +50 %) el 7,7 %, frente a una media del 1,3 %: unas 6 veces más que al azar. Por separado, explotaron
+  al día siguiente el 48 % (media 18 %) y llegaron a +50 % el 11,4 % (media 3,8 %). No es una garantía: la mayoría
+  de las monedas de la lista no acierta.
 
 ## GitHub Actions
 
