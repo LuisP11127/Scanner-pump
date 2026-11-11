@@ -3,7 +3,8 @@
 **La idea.** En el seguimiento, la vela de análisis es la del día anterior a la explosión: la moneda todavía no
 subió. Cada día, al cierre de la vela diaria (00:00 UTC = 19:00 hora Lima), se revisan **todas** las monedas de
 Binance que aún no explotaron (su vela del día subió menos de 10 % de mínimo a máximo) y se buscan las que
-se parecen a lo que tenían, en su vela de análisis, las que luego subieron +50 %.
+se parecen a lo que tenían, en su vela de análisis, las que al día siguiente explotaron (vela de +10 %) y desde
+ese momento subieron +50 %.
 
 **La huella.** Las velas de 2H, 4H, 8H y 12H hasta el cierre, 84 de cada una (7, 14, 28 y 42 días); las de 4H, 8H y
 12H se construyen con las de 2H, que empiezan a las 00:00 UTC igual que las de Binance. De cada temporalidad salen:
@@ -16,11 +17,12 @@ se parecen a lo que tenían, en su vela de análisis, las que luego subieron +50
   distancia del precio al último techo y al último suelo, y si ya rompió el último techo. Solo cuentan los
   fractales confirmados antes del cierre (los de las dos últimas velas aún no lo están).
 
-**La biblioteca.** Todas las monedas cada 2 días desde 2023 con lo que pasó después: si el máximo de los 10 días
-siguientes subió +50 % sobre el cierre. Se compara con todas, también con las que no subieron: una huella que
-tienen muchas ganadoras pero también muchas que no subieron no puntúa alto.
+**La biblioteca.** Todas las monedas cada 2 días desde 2023 con lo que pasó después: acertó si la vela siguiente
+fue una explosión (+10 % de mínimo a máximo) y el máximo de los 10 días siguientes subió +50 % sobre el cierre de
+la vela de análisis (el momento en que empieza la explosión). Se compara con todas, también con las que no
+subieron: una huella que tienen muchas ganadoras pero también muchas que no subieron no puntúa alto.
 
-**La puntuación.** De las 100 situaciones pasadas (ya con resultado) más parecidas, qué parte llegó a +50 %.
+**La puntuación.** De las 100 situaciones pasadas (ya con resultado) más parecidas, qué parte acertó.
 """
 
 from __future__ import annotations
@@ -201,6 +203,7 @@ EXPLOSION = 10.0  # % de mínimo a máximo de la vela siguiente para contar que 
 VECINAS = 100
 MUESTRA_NO = 4  # de las situaciones que no llegaron a +50 % la biblioteca guarda 1 de cada 4 (y pesan 4)
 TOP = 30  # monedas que se guardan de cada predicción
+VERSION = 3  # 3: el objetivo es explotar al día siguiente y subir +50 % desde ahí (2: solo +50 %)
 HISTORIA_MIN = 45 * DIA_MS  # días de velas que necesita una moneda para tener huella
 MOVIMIENTO_MIN = 5.0  # % de mínimo a máximo en los últimos 30 días: con menos es casi una moneda estable
 
@@ -240,6 +243,13 @@ def vela_analisis(t: np.ndarray, v: np.ndarray, dia: int) -> Optional[dict]:
     return fila
 
 
+def acierto(manana, max_despues):
+    """El objetivo: la vela siguiente es la explosión (+10 % de mínimo a máximo) y desde que empieza (el cierre de la
+    vela de análisis) el precio sube +50 % en los 10 días siguientes."""
+    with np.errstate(invalid="ignore"):
+        return (np.asarray(manana, float) >= EXPLOSION) & (np.asarray(max_despues, float) >= OBJETIVO)
+
+
 def _muestra(simbolo: str, dia: int) -> bool:
     """¿Entra en la biblioteca una situación que no llegó a +50 %? (1 de cada ``MUESTRA_NO``, siempre la misma)."""
     return (int(dia // DIA_MS) + sum(map(ord, simbolo))) % MUESTRA_NO == 0
@@ -257,8 +267,8 @@ class Rejilla:
 
     def biblioteca(self, hasta: int) -> "Biblioteca":
         """Las situaciones cuyo resultado a 10 días ya se conocía en ``hasta`` (las que no subieron, muestreadas)."""
-        llego = self.max10 >= OBJETIVO
-        conocida = np.isfinite(self.max10) & (self.dia + VENTANA_DIAS * DIA_MS <= hasta)
+        llego = acierto(self.manana, self.max10)
+        conocida = np.isfinite(self.max10) & np.isfinite(self.manana) & (self.dia + VENTANA_DIAS * DIA_MS <= hasta)
         muestra = np.array([_muestra(self.pares[p].split("/")[1], int(d)) for p, d in zip(self.par, self.dia)], bool)
         sel = np.flatnonzero(conocida & (llego | muestra))
         return Biblioteca(self.x[sel], llego[sel], np.where(llego[sel], 1.0, float(MUESTRA_NO)),
@@ -303,7 +313,7 @@ def construir_rejilla(carpeta: Path) -> Rejilla:
 
 
 class Biblioteca:
-    """Situaciones pasadas (huella al cierre de una vela) con su resultado: ¿subió +50 % en los 10 días siguientes?"""
+    """Situaciones pasadas (huella al cierre de una vela) con su resultado: ¿explotó y subió +50 %?"""
 
     def __init__(self, x: np.ndarray, llego: np.ndarray, peso: Optional[np.ndarray] = None, info: Optional[list] = None) -> None:
         self.llego = np.asarray(llego, bool)
@@ -330,7 +340,7 @@ class Biblioteca:
         return out
 
     def puntuar(self, consultas: np.ndarray, k: Optional[int] = None) -> tuple[np.ndarray, np.ndarray]:
-        """Qué parte de las parecidas llegó a +50 % (con su peso: cuentan también las que no subieron)."""
+        """Qué parte de las parecidas acertó (con su peso: cuentan también las que no)."""
         idx = self.vecinas(consultas, k)
         p = self.peso[idx]
         return (self.llego[idx] * p).sum(axis=1) / p.sum(axis=1), idx
@@ -371,10 +381,10 @@ def candidatas(carpeta: Path, dia: int) -> tuple[list[dict], np.ndarray]:
 
 def predecir(carpeta: Path, dia: int, rejilla: Rejilla, ahora: Optional[int] = None) -> dict:
     """Las ``TOP`` monedas que aún no explotaron cuya huella al cierre de ``dia`` más se parece a la que tenían, en
-    su vela de análisis, las que luego subieron +50 %. Solo usa lo que se sabía ese día."""
+    su vela de análisis, las que al día siguiente explotaron y desde ahí subieron +50 %. Solo usa lo que se sabía."""
     biblio = rejilla.biblioteca(dia)
     monedas, x = candidatas(carpeta, dia)
-    out = {"version": 2, "fecha": etiqueta(dia), "escaneo_utc": _iso(dia),
+    out = {"version": VERSION, "fecha": etiqueta(dia), "escaneo_utc": _iso(dia),
            "calculada": _iso(ahora or int(datetime.now(timezone.utc).timestamp() * 1000)),
            "biblioteca": {"situaciones": len(biblio), "llegaron": int(biblio.llego.sum())},
            "evaluadas": 0, "monedas": []}
@@ -421,9 +431,9 @@ def completar(prediccion: dict, carpeta: Path) -> bool:
 
 
 def media_del_dia(carpeta: Path, dia: int) -> Optional[dict]:
-    """De todas las monedas que no habían explotado ese día: cuántas explotaron al día siguiente y cuántas llegaron
-    a +50 % en 10 días (``None`` hasta que haya pasado el día siguiente)."""
-    manana, llegaron, vistas = [], [], set()
+    """De todas las monedas que no habían explotado ese día: cuántas explotaron al día siguiente, cuántas llegaron
+    a +50 % en 10 días y cuántas las dos cosas (``None`` hasta que haya pasado el día siguiente)."""
+    manana, llegaron, acertaron, vistas = [], [], [], set()
     for ruta in sorted(carpeta.glob("*/*.npz"), key=lambda r: (r.parent.name != "futures", r.stem)):
         if ruta.stem[:-4] in vistas:  # cada moneda una vez aunque esté en spot y en futuros
             continue
@@ -438,10 +448,12 @@ def media_del_dia(carpeta: Path, dia: int) -> Optional[dict]:
             manana.append(a["manana"] >= EXPLOSION)
         if a["max_despues"] is not None:
             llegaron.append(a["max_despues"] >= OBJETIVO)
+            acertaron.append(bool(acierto(a["manana"], a["max_despues"])))
     if not manana:
         return None
     return {"monedas": len(manana), "explotaron": round(float(np.mean(manana)), 4),
-            "llegaron": round(float(np.mean(llegaron)), 4) if len(llegaron) >= len(manana) * 0.9 else None}
+            "llegaron": round(float(np.mean(llegaron)), 4) if len(llegaron) >= len(manana) * 0.9 else None,
+            "acertaron": round(float(np.mean(acertaron)), 4) if len(acertaron) >= len(manana) * 0.9 else None}
 
 
 def reconstruida(prediccion: dict) -> bool:
@@ -454,17 +466,19 @@ def reconstruida(prediccion: dict) -> bool:
 
 
 def resumen_dia(prediccion: dict, n: int = 5) -> dict:
-    """De las ``n`` primeras: cuántas explotaron al día siguiente y cuántas llegaron a +50 % (de las que ya se sabe)."""
+    """De las ``n`` primeras: cuántas explotaron al día siguiente, cuántas llegaron a +50 % y cuántas acertaron (las
+    dos cosas), de las que ya se sabe."""
     top = prediccion.get("monedas", [])[:n]
     man = [c["manana"] >= EXPLOSION for c in top if c.get("manana") is not None]
-    lle = [c["max_despues"] >= OBJETIVO for c in top if c.get("max_despues") is not None]
-    return {"explotaron": sum(man), "de_manana": len(man), "llegaron": sum(lle), "de_10d": len(lle)}
+    con = [c for c in top if c.get("max_despues") is not None and c.get("manana") is not None]
+    return {"explotaron": sum(man), "de_manana": len(man), "llegaron": sum(c["max_despues"] >= OBJETIVO for c in con),
+            "acertaron": int(sum(acierto(c["manana"], c["max_despues"]) for c in con)), "de_10d": len(con)}
 
 
 def en_vivo(predicciones: list[dict]) -> dict:
     """Acierto acumulado de las 5 primeras de cada predicción, frente a la media de las monedas de esos días."""
     r = {"dias_manana": 0, "explotaron": 0, "de_manana": 0, "base_explotaron": [],
-         "dias_10d": 0, "llegaron": 0, "de_10d": 0, "base_llegaron": []}
+         "dias_10d": 0, "llegaron": 0, "acertaron": 0, "de_10d": 0, "base_llegaron": [], "base_acertaron": []}
     for p in predicciones:
         s, base = resumen_dia(p), p.get("base") or {}
         if s["de_manana"]:
@@ -476,10 +490,13 @@ def en_vivo(predicciones: list[dict]) -> dict:
         if s["de_10d"] >= 5:
             r["dias_10d"] += 1
             r["llegaron"] += s["llegaron"]
+            r["acertaron"] += s["acertaron"]
             r["de_10d"] += s["de_10d"]
             if base.get("llegaron") is not None:
                 r["base_llegaron"].append(base["llegaron"])
-    for k in ("base_explotaron", "base_llegaron"):
+            if base.get("acertaron") is not None:
+                r["base_acertaron"].append(base["acertaron"])
+    for k in ("base_explotaron", "base_llegaron", "base_acertaron"):
         r[k] = round(float(np.mean(r[k])), 4) if r[k] else None
     return r
 
@@ -493,7 +510,8 @@ def probar(rejilla: Rejilla, desde: str = "2025-01-01") -> dict:
     meses = sorted({datetime.fromtimestamp(d / 1000, timezone.utc).strftime("%Y-%m") for d in rejilla.dia if d >= inicio})
     conocida = np.isfinite(rejilla.max10) & np.isfinite(rejilla.manana) & (rejilla.rango < QUIETA)
     bases = np.array([p.split("/")[1][:-4] for p in rejilla.pares])
-    top5_lle, top5_exp, base_lle, base_exp = [], [], [], []
+    top5_lle, top5_exp, top5_ace, base_lle, base_exp, base_ace = [], [], [], [], [], []
+    ok = acierto(rejilla.manana, rejilla.max10)
     for mes in meses:
         a = int(datetime.fromisoformat(mes + "-01").replace(tzinfo=timezone.utc).timestamp() * 1000)
         b = int(datetime.fromisoformat((datetime.fromisoformat(mes + "-01") + timedelta(days=32)).strftime("%Y-%m-01"))
@@ -518,10 +536,12 @@ def probar(rejilla: Rejilla, desde: str = "2025-01-01") -> dict:
             top5_exp.append(np.mean(rejilla.manana[top] >= EXPLOSION))
             base_lle.append(np.mean(rejilla.max10[filas] >= OBJETIVO))
             base_exp.append(np.mean(rejilla.manana[filas] >= EXPLOSION))
+            top5_ace.append(np.mean(ok[top]))
+            base_ace.append(np.mean(ok[filas]))
     r = lambda xs: round(float(np.mean(xs)), 4) if xs else None
     return {"desde": desde, "dias": len(top5_lle), "situaciones": int(conocida[rejilla.dia >= inicio].sum()),
-            "base": {"llegaron": r(base_lle), "explotaron": r(base_exp)},
-            "top5": {"llegaron": r(top5_lle), "explotaron": r(top5_exp)}}
+            "base": {"llegaron": r(base_lle), "explotaron": r(base_exp), "acertaron": r(base_ace)},
+            "top5": {"llegaron": r(top5_lle), "explotaron": r(top5_exp), "acertaron": r(top5_ace)}}
 
 
 # --- Línea de comandos -----------------------------------------------------------------------------------
@@ -563,7 +583,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     for ruta in sorted(args.salida.glob("*.json")):
         if re.fullmatch(r"\d{4}-\d{2}-\d{2}", ruta.stem):
             p = _leer_json(ruta)
-            if not p or p.get("version") != 2:
+            if not p or p.get("version") != VERSION:
                 ruta.unlink()
             else:
                 hechas[ruta.stem] = p
@@ -585,7 +605,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if args.probar:
         res = probar(rejilla)
         _escribir_json(args.salida / "prueba.json", res)
-        print(f"Prueba desde {res['desde']}: de las 5 primeras de cada día llegaron a +{OBJETIVO:.0f} % el "
+        print(f"Prueba desde {res['desde']}: de las 5 primeras de cada día explotaron y subieron +{OBJETIVO:.0f} % el "
+              f"{res['top5']['acertaron']:.1%} (media {res['base']['acertaron']:.1%}); llegaron a +{OBJETIVO:.0f} % el "
               f"{res['top5']['llegaron']:.1%} (media {res['base']['llegaron']:.1%}); explotaron al día siguiente el "
               f"{res['top5']['explotaron']:.1%} (media {res['base']['explotaron']:.1%})")
     for aviso in avisos:

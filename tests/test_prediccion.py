@@ -54,6 +54,10 @@ def test_huella_solo_con_velas_anteriores_al_escaneo():
     assert P.huella(t, v, T0 + 10 * DIA) is None
 
 
+def test_acierto_es_explotar_y_subir_50():
+    assert P.acierto([12, 12, 3, np.nan], [60, 20, 80, 90]).tolist() == [True, False, False, False]
+
+
 def test_vela_de_analisis_y_lo_que_paso_despues():
     t, v = serie(40, explota=20, sube=0.4)
     a = P.vela_analisis(t, v, T0 + 20 * DIA)  # la vela del día 19 cierra cuando abre la explosión
@@ -95,7 +99,7 @@ def test_predecir_y_completar(tmp_path, monkeypatch):
     assert len(rejilla) and (rejilla.dia % (2 * DIA) == P.DESDE_REJILLA % (2 * DIA)).all()
     dia = T0 + 120 * DIA  # cierre de la vela del día 119: DUSDT explota en ella (no es candidata)
     pred = P.predecir(cache, dia, rejilla, ahora=dia + 3600_000)
-    assert pred["version"] == 2 and pred["escaneo_utc"].startswith(P._iso(dia)[:10]) and not P.reconstruida(pred)
+    assert pred["version"] == P.VERSION and pred["escaneo_utc"].startswith(P._iso(dia)[:10]) and not P.reconstruida(pred)
     assert pred["fecha"] == P.etiqueta(dia)
     simbolos = [c["simbolo"] for c in pred["monedas"]]
     assert "DUSDT" not in simbolos and simbolos.count("AUSDT") == 1  # en spot y futuros: una vez
@@ -106,7 +110,7 @@ def test_predecir_y_completar(tmp_path, monkeypatch):
     assert pred["biblioteca"]["situaciones"] <= ((rejilla.dia + 10 * DIA <= dia) & np.isfinite(rejilla.max10)).sum()
     # Lo que pasó después se añade cuando se sabe
     assert P.completar(pred, cache) and all(c["manana"] is not None and c["max_despues"] is not None for c in pred["monedas"])
-    assert pred["base"]["monedas"] == 3 and pred["base"]["llegaron"] is not None
+    assert pred["base"]["monedas"] == 3 and pred["base"]["llegaron"] is not None and pred["base"]["acertaron"] is not None
     assert not P.completar(pred, cache)
     # Muy reciente: ni vela siguiente ni 10 días
     tarde = P.predecir(cache, T0 + 139 * DIA, rejilla, ahora=T0 + 139 * DIA)
@@ -114,14 +118,15 @@ def test_predecir_y_completar(tmp_path, monkeypatch):
 
 
 def test_resumen_en_vivo_y_web(tmp_path):
-    monedas = [{"mercado": "spot", "simbolo": f"X{i}USDT", "manana": 12.0 if i < 2 else 3.0, "max_despues": 60.0 if i == 0 else 5.0}
+    monedas = [{"mercado": "spot", "simbolo": f"X{i}USDT", "manana": 12.0 if i < 2 else 3.0, "max_despues": {0: 60.0, 2: 70.0}.get(i, 5.0)}
                for i in range(6)]
-    pred = {"version": 2, "fecha": "2026-11-07", "escaneo_utc": "2026-11-09T00:00:00Z", "calculada": "2026-11-09T02:00:00Z",
-            "evaluadas": 300, "monedas": monedas, "base": {"monedas": 300, "explotaron": 0.1, "llegaron": 0.04}}
-    assert P.resumen_dia(pred) == {"explotaron": 2, "de_manana": 5, "llegaron": 1, "de_10d": 5}
+    pred = {"version": P.VERSION, "fecha": "2026-11-07", "escaneo_utc": "2026-11-09T00:00:00Z", "calculada": "2026-11-09T02:00:00Z",
+            "evaluadas": 300, "monedas": monedas, "base": {"monedas": 300, "explotaron": 0.1, "llegaron": 0.04, "acertaron": 0.01}}
+    # X0 explotó y subió +50 % (acierta); X2 subió +50 % pero sin explotar al día siguiente (no acierta)
+    assert P.resumen_dia(pred) == {"explotaron": 2, "de_manana": 5, "llegaron": 2, "acertaron": 1, "de_10d": 5}
     vivo = P.en_vivo([pred])
-    assert (vivo["explotaron"], vivo["de_manana"], vivo["llegaron"], vivo["de_10d"]) == (2, 5, 1, 5)
-    assert vivo["base_explotaron"] == 0.1 and vivo["base_llegaron"] == 0.04
+    assert (vivo["explotaron"], vivo["de_manana"], vivo["llegaron"], vivo["acertaron"], vivo["de_10d"]) == (2, 5, 2, 1, 5)
+    assert vivo["base_explotaron"] == 0.1 and vivo["base_llegaron"] == 0.04 and vivo["base_acertaron"] == 0.01
     vieja = dict(pred, calculada="2026-11-12T00:00:00Z", fecha="2026-11-06", escaneo_utc="2026-11-08T00:00:00Z")
     assert P.reconstruida(vieja) and not P.reconstruida(pred)
     salida = tmp_path / "datos"
@@ -143,3 +148,4 @@ def test_probar_sin_mirar_el_futuro(tmp_path, monkeypatch):
     rejilla = P.construir_rejilla(_cache(tmp_path))
     res = P.probar(rejilla, desde="2024-01-01")
     assert res["dias"] > 0 and 0 <= res["top5"]["explotaron"] <= 1 and 0 <= res["base"]["llegaron"] <= 1
+    assert res["base"]["acertaron"] <= min(res["base"]["llegaron"], res["base"]["explotaron"])

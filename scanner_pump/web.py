@@ -18,7 +18,7 @@ from typing import Optional, Sequence
 
 from .binance import SPOT, BinanceClient
 from .listados import read_listings
-from .prediccion import en_vivo, reconstruida, resumen_dia
+from .prediccion import VERSION as PREDICCION_VERSION, en_vivo, reconstruida, resumen_dia
 from .report import render_page
 from .scanner import is_tokenized_stock
 from .seguimiento import collect_days
@@ -49,7 +49,7 @@ def write_predictions(source: Path, dest: Path, generated: str) -> None:
             day = json.loads(path.read_text(encoding="utf-8"))
         except ValueError:
             continue
-        if day.get("version") != 2:  # de la versión anterior (monedas que ya habían explotado)
+        if day.get("version") != PREDICCION_VERSION:  # de una versión anterior
             continue
         days.append(day)
         dest.mkdir(parents=True, exist_ok=True)

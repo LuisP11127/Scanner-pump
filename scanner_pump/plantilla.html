@@ -2443,7 +2443,7 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
   const pred = { indice: null, dias: {}, abiertos: null, todas: new Set(), cargando: null };
   const PRED_TOP = 10;  // monedas que se ven de cada predicción (el resto con «Ver todas»)
   const EXPLOTA = 10;   // % de mínimo a máximo de la vela siguiente para contar que explotó
-  const pctEntero = (v) => (v == null ? "—" : Math.round(v * 100) + " %");
+  const pctEntero = (v) => (v == null ? "—" : v > 0 && v < 0.1 ? (v * 100).toFixed(1).replace(".", ",") + " %" : Math.round(v * 100) + " %");
   // La predicción lleva la fecha de su vela de análisis (como la muestra Binance en hora Lima): la «Predicción del
   // 08-11-2026» usa la vela del 8 de noviembre, que va del 8 a las 19:00 al 9 a las 19:00 (hora Lima), y se calcula
   // en cuanto esa vela cierra. Las demás horas de la sección también van en hora Lima.
@@ -2489,9 +2489,10 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
     if (faltan.length) status.textContent = "";
     $("pred-note").textContent = "Cada día, al cierre de la vela (19:00 hora Lima), se revisan todas las monedas de Binance que aún no explotaron " +
       "(su vela subió menos de 10 % de mínimo a máximo) y se buscan las que tienen la huella de una vela de análisis: velas de 2H, 4H, 8H y 12H " +
-      "(forma del precio, volumen, volatilidad y fractales de 5 velas) parecidas a las que tenían, el día antes de explotar, las monedas que luego " +
-      "subieron +50 %. «Parecidas que subieron»: de las 100 situaciones pasadas más parecidas (también las que no subieron), qué parte llegó a +50 % " +
-      "en 10 días. Cada predicción queda aquí para ver si acertó: si al día siguiente explotó (vela de +10 %) y si llegó a +50 % en 10 días. " +
+      "(forma del precio, volumen, volatilidad y fractales de 5 velas) parecidas a las que tenían, el día antes de explotar, las monedas que " +
+      "desde la explosión subieron +50 %. «Parecidas que acertaron»: de las 100 situaciones pasadas más parecidas " +
+      "(también las que no), qué parte hizo eso. Cada predicción queda aquí para ver si acertó: si al día siguiente explotó (vela de +10 %) y si " +
+      "desde ahí llegó a +50 % en 10 días (✓). " +
       "Pulsa una moneda para ver su gráfico.";
     body.textContent = "";
     body.append(predAciertoCard(indice), ...indice.dias.map(predDayCard), predStatsCard(indice));
@@ -2507,9 +2508,10 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
     const linea = (titulo, r, vacio) => {
       if (!r || !r.de_manana) return h("p", null, h("b", { text: titulo }), " " + vacio);
       return h("p", null, h("b", { text: titulo }), " de las 5 primeras de cada día, ",
-        h("b", { class: "up", text: deN(r.explotaron, r.de_manana) }), " explotaron al día siguiente (media de las monedas del día: " + pctEntero(r.base_explotaron) + ")",
-        r.de_10d ? h("span", null, " y ", h("b", { class: "up", text: deN(r.llegaron, r.de_10d) }),
-          " llegaron a +50 % en 10 días (media: " + pctEntero(r.base_llegaron) + ")") : h("span", { text: "; a +50 % en 10 días todavía ninguna terminada" }),
+        r.de_10d ? h("span", null, h("b", { class: "up", text: deN(r.acertaron, r.de_10d) }), " acertaron: explotaron al día siguiente y subieron +50 % " +
+          "(media de las monedas del día: " + pctEntero(r.base_acertaron) + "). Por separado, ") : h("span", { text: "todavía ninguna con los 10 días terminados; por ahora " }),
+        h("b", { text: deN(r.explotaron, r.de_manana) }), " explotaron al día siguiente (media " + pctEntero(r.base_explotaron) + ")",
+        r.de_10d ? " y " + deN(r.llegaron, r.de_10d) + " llegaron a +50 % (media " + pctEntero(r.base_llegaron) + ")" : "",
         ". " + r.dias_manana + (r.dias_manana === 1 ? " día medido." : " días medidos."));
     };
     const reales = indice.en_vivo && indice.en_vivo.reales, recon = indice.en_vivo && indice.en_vivo.reconstruidas;
@@ -2550,13 +2552,14 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
       estado.push(h("span", { text: "Día siguiente: se sabe el " + limaHora(escaneo + DAY) }));
     }
     if (r.de_10d >= 5) {
-      estado.push(h("span", null, "+50 % en 10 días: ", h("b", { class: r.llegaron ? "up" : "", text: r.llegaron + " de " + r.de_10d }),
-        base.llegaron != null ? " (media " + pctEntero(base.llegaron) + ")" : ""));
+      estado.unshift(h("span", null, "Acertaron: ", h("b", { class: r.acertaron ? "up" : "", text: r.acertaron + " de " + r.de_10d }),
+        " explotaron y subieron +50 %", base.acertaron != null ? " (media " + pctEntero(base.acertaron) + ")" : ""));
     } else if (now < fin) {
       const pasados = Math.max(0, Math.floor((now - escaneo) / DAY));
-      const top = coins.slice(0, 5).map((c) => afterPct(c, "high"));
-      if (top.some((v) => v != null)) {
-        estado.push(h("span", null, "Por ahora: ", h("b", { class: "up", text: top.filter((v) => v != null && v >= 50).length + " de " + top.length }), " pasaron +50 %"));
+      const top = coins.slice(0, 5);
+      if (r.de_manana && top.some((c) => afterPct(c, "high") != null)) {
+        const van = top.filter((c) => c.manana >= EXPLOTA && afterPct(c, "high") >= 50).length;
+        estado.push(h("span", null, "Por ahora aciertan: ", h("b", { class: van ? "up" : "", text: van + " de " + top.length }), " (explotaron y ya pasaron +50 %)"));
       }
       estado.push(h("span", { text: "Se mide hasta el " + limaHora(fin) + " (" + (10 - pasados === 1 ? "queda 1 día" : "quedan " + (10 - pasados) + " días") + ")" }));
     } else {
@@ -2579,23 +2582,25 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
     table.append(h("thead", null, h("tr", null,
       h("th", { class: "r", text: "#" }),
       h("th", { text: "Moneda" }),
-      h("th", { class: "r", text: "Parecidas que subieron", title: "De las 100 situaciones pasadas con la huella más parecida (también las que no subieron), qué parte subió +50 % en los 10 días siguientes" }),
+      h("th", { class: "r", text: "Parecidas que acertaron", title: "De las 100 situaciones pasadas con la huella más parecida (también las que no), qué parte explotó al día siguiente y desde ahí subió +50 % en 10 días" }),
       h("th", { class: "r", text: "Mín→Máx", title: "Vela de análisis: de mínimo a máximo (menos de 10 %: aún no explotó)" }),
       h("th", { class: "r", text: "Apert→Cierre", title: "Vela de análisis: de apertura a cierre" }),
-      h("th", { text: "Se parece a", title: "Tres situaciones pasadas parecidas que luego subieron, con su vela de análisis y cuánto subieron en 10 días" }),
+      h("th", { text: "Se parece a", title: "Tres situaciones pasadas parecidas que acertaron, con su vela de análisis y cuánto subieron en 10 días desde la explosión" }),
       h("th", { class: "r", text: "Día siguiente", title: "La vela siguiente, de mínimo a máximo: explotó si llegó a +10 %" }),
-      h("th", { class: "r", text: enCurso ? "Máx después" : "Máx en 10 días", title: "Precio más alto desde el cierre de la vela de análisis; acierta si llega a +50 %" }),
+      h("th", { class: "r", text: enCurso ? "Máx después" : "Máx en 10 días", title: "Precio más alto desde el cierre de la vela de análisis (cuando empieza la explosión); acierta (✓) si explotó al día siguiente y llega a +50 %" }),
       enCurso ? h("th", { class: "r", text: "Desde el cierre", title: "Variación del precio actual respecto al cierre de la vela de análisis" }) : null)));
     const tbody = h("tbody");
     visibles.forEach((c, i) => {
       const parecidas = (c.vecinas || []).map(([sym, mercado, cierre, max]) => h("span", { class: "pred-like" + (max >= 50 ? " up" : ""),
-        title: sym + " (" + (MARKET_NAMES[mercado] || mercado) + "), vela de análisis del " + dayTitle(labelOf(cierre - DAY)) + ": luego " + fmtPct(max) + " en 10 días",
+        title: sym + " (" + (MARKET_NAMES[mercado] || mercado) + "), vela de análisis del " + dayTitle(labelOf(cierre - DAY)) + ": al día siguiente explotó y subió " + fmtPct(max) + " en 10 días",
         text: sym.replace(/USDT$/, "") + " " + shortDate(labelOf(cierre - DAY)) + " " + fmtPct(max) }));
       let maxCell;
       if (c.max_despues != null) {
         const m = c.max_despues;
-        maxCell = h("td", { class: "r num c-high " + (m >= 50 ? "hit" : ""), "data-label": "Máx en 10 días",
-          title: m >= 50 ? "Acertó: llegó a +50 %" : "No llegó a +50 %", text: fmtPct(m) + (m >= 50 ? " ✓" : "") });
+        const ok = m >= 50 && c.manana >= EXPLOTA;
+        maxCell = h("td", { class: "r num c-high " + (ok ? "hit" : ""), "data-label": "Máx en 10 días",
+          title: ok ? "Acertó: explotó al día siguiente y llegó a +50 %" : m >= 50 ? "Llegó a +50 %, pero sin explotar al día siguiente" : "No llegó a +50 %",
+          text: fmtPct(m) + (ok ? " ✓" : "") });
       } else if (enCurso) {
         maxCell = rangeCell(c, "high");
       } else {
@@ -2610,7 +2615,7 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
         h("td", { class: "r num c-rank", text: String(i + 1) }),
         h("td", { class: "c-coin" }, h("span", { class: "coin" }, c.base || c.simbolo, h("small", { text: c.quote ? "/" + c.quote : "" })),
           h("span", { class: "badge", text: MARKET_NAMES[c.mercado] || c.mercado })),
-        h("td", { class: "r num c-like", "data-label": "Parecidas que subieron", text: pctEntero(c.parecido) }),
+        h("td", { class: "r num c-like", "data-label": "Parecidas que acertaron", text: pctEntero(c.parecido) }),
         h("td", { class: "r num c-rango", "data-label": "Mín→Máx", text: fmtPct(c.pct_rango) }),
         h("td", { class: "r num c-cuerpo " + (c.pct_cuerpo >= 0 ? "up" : "down"), "data-label": "Apert→Cierre", text: fmtPct(c.pct_cuerpo) }),
         h("td", { class: "c-sim", "data-label": "Se parece a" }, ...parecidas),
@@ -2640,9 +2645,10 @@ body.dragging .wrap { outline: 2px dashed var(--accent); outline-offset: -8px; }
     if (prueba && prueba.top5) {
       box.append(h("p", null, h("b", { text: "Prueba hacia atrás desde " + prueba.desde.slice(0, 4) }),
         " (" + prueba.situaciones.toLocaleString("es-ES") + " velas de monedas que aún no habían explotado, en " + prueba.dias + " días, sin mirar el futuro): " +
-        "de las 5 primeras de cada día explotaron al día siguiente el ", h("b", { class: "up", text: pctEntero(prueba.top5.explotaron) }),
-        " (media " + pctEntero(prueba.base.explotaron) + ") y llegaron a +50 % en 10 días el ", h("b", { class: "up", text: pctEntero(prueba.top5.llegaron) }),
-        " (media " + pctEntero(prueba.base.llegaron) + ")."));
+        "de las 5 primeras de cada día acertaron (explotaron al día siguiente y desde ahí subieron +50 %) el ",
+        h("b", { class: "up", text: pctEntero(prueba.top5.acertaron) }), " (media " + pctEntero(prueba.base.acertaron) + "). Por separado, explotaron al día siguiente el " +
+        pctEntero(prueba.top5.explotaron) + " (media " + pctEntero(prueba.base.explotaron) + ") y llegaron a +50 % en 10 días el " +
+        pctEntero(prueba.top5.llegaron) + " (media " + pctEntero(prueba.base.llegaron) + ")."));
     }
     box.append(h("p", { class: "gh-note", text: "No es una garantía: aunque acierta varias veces más que elegir al azar, la mayoría de las monedas de la lista " +
       "no llega a +50 %, y las que suben mucho también caen mucho. Solo cuentan los pares que Binance tiene hoy (los retirados no están en la biblioteca)." }));
