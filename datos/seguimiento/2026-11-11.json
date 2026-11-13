@@ -667,7 +667,7 @@
    "close": 0.233,
    "volumen": 817005.02,
    "pct_rango": 22.1239,
-   "pct_cuerpo": 0.0,
+   "pct_cuerpo": 0,
    "analisis": {
     "open": 0.243,
     "high": 0.247,
@@ -923,7 +923,7 @@
     "high": 0.5518,
     "low": 0.4365,
     "close": 0.4519,
-    "volumen": 14964135.0,
+    "volumen": 14964135,
     "pct_rango": 26.4147,
     "pct_cuerpo": -7.719
    }
@@ -2075,7 +2075,7 @@
     "close": 13.85,
     "volumen": 3166196.85,
     "pct_rango": 6.1597,
-    "pct_cuerpo": 0.0
+    "pct_cuerpo": 0
    }
   },
   {
@@ -2190,7 +2190,7 @@
    "high": 0.2614,
    "low": 0.2371,
    "close": 0.2486,
-   "volumen": 18701053.0,
+   "volumen": 18701053,
    "pct_rango": 10.2488,
    "pct_cuerpo": -1.9329,
    "analisis": {
