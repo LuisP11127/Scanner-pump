@@ -1138,6 +1138,7 @@
   "spot:SKYUSDT": {"base":"SKY","listado":1758096000000},
   "spot:SLFUSDT": {"base":"SLF","listado":1725004800000},
   "spot:SLPUSDT": {"base":"SLP","listado":1619784000000},
+  "spot:SNDKBUSDT": {"base":"SNDKB","listado":1781200800000,"precio_inicial":1700.0},
   "spot:SNTUSDT": {"base":"SNT","listado":1684483200000},
   "spot:SNXUSDT": {"base":"SNX","listado":1594296000000},
   "spot:SOLUSDT": {"base":"SOL","listado":1597125600000},
