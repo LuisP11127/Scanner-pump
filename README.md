@@ -158,9 +158,17 @@ Cómo se calcula (`python -m scanner_pump.prediccion`, workflow **Predicción**;
 | Workflow | Cuándo | Qué hace |
 |---|---|---|
 | **Escaneo diario** (`escaneo-diario.yml`) | Cada día a las 00:07 UTC (19:07 hora Lima), justo después del cierre de la vela. También a mano. | Escanea la última vela completa y guarda las explosiones en `datos/seguimiento/`. Actualiza las fechas de listado en `datos/listados.json` (solo los pares nuevos). Deja el informe con los gráficos en **Artifacts → scanner-pump** y la tabla en el resumen. |
-| **Predicción** (`prediccion.yml`) | Cada día a las 00:25 UTC y tras cada escaneo diario. También a mano (se pueden elegir velas de análisis o repetir la prueba). | Pone al día las velas de 2H de todos los pares (en la caché de Actions, no en el repositorio; la primera vez descarga desde 2022, hasta unos 35 minutos), busca las monedas que aún no explotaron con huella de vela de análisis, guarda `datos/prediccion/` y añade lo que ya se sabe de las anteriores (vela siguiente y máximo a 10 días). |
+| **Predicción** (`prediccion.yml`) | Cada día a las 00:25 UTC, lanzado por el Worker de Cloudflare `reloj-scanner-pump` (ver abajo), y tras cada escaneo diario. También a mano (se pueden elegir velas de análisis o repetir la prueba). | Pone al día las velas de 2H de todos los pares (en la caché de Actions, no en el repositorio; la primera vez descarga desde 2022, hasta unos 35 minutos), busca las monedas que aún no explotaron con huella de vela de análisis, guarda `datos/prediccion/` y añade lo que ya se sabe de las anteriores (vela siguiente y máximo a 10 días). |
 | **Web** (`web.yml`) | Tras cada escaneo diario, cada predicción y cada cambio en `main`. | Publica la web en GitHub Pages con todo el seguimiento (`seguimiento.json`), las fechas de listado (`listados.json`) y las predicciones (`prediccion/`). |
 | **Tests** (`tests.yml`) | En cada pull request y cambio en `main`. | Pasa los tests y comprueba la huella de la librería de gráficos. |
+
+**Reloj de Cloudflare.** GitHub retrasa horas los workflows programados (el de las 00:25 UTC llegaba a correr entre
+las 06:45 y las 08:10 UTC), pero los lanzados a mano arrancan en segundos. El Worker `reloj-scanner-pump`
+([`cloudflare/reloj.js`](cloudflare/reloj.js)) tiene un Cron Trigger a las **00:25 UTC (19:25 hora Lima)** que lanza
+**Predicción** con `workflow_dispatch`. Necesita el secreto `GITHUB_TOKEN` en el Worker (Cloudflare → Workers →
+reloj-scanner-pump → Settings → Variables and Secrets): una clave fine-grained de GitHub con acceso a este
+repositorio y el permiso **Actions: Read and write**. Su página (`https://reloj-scanner-pump.<subdominio>.workers.dev`)
+dice si la clave está puesta. El horario de GitHub se queda como respaldo: si corre después, solo completa resultados.
 
 **Escaneo manual:** **Actions → Escaneo diario → Run workflow**. Puedes dejar la fecha vacía (última vela
 completa) o escribir una o varias fechas separadas por espacios (`2026-10-01 2026-10-02`, fecha de la vela en
