@@ -45,13 +45,13 @@ jobs:
       PYTHONUNBUFFERED: "1"
       PYTHONIOENCODING: utf-8
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - run: python -m pip install -r requirements.txt
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: cache/velas-2h
           key: velas-2h-${{ github.run_id }}

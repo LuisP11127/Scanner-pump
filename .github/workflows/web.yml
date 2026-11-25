@@ -41,24 +41,37 @@ jobs:
             echo "::notice title=Web sin publicar::Activa GitHub Pages con «Source: GitHub Actions» (ver README)."
           fi
 
-  deploy:
+  # Generar y publicar van en jobs distintos (como recomienda GitHub): a veces deploy-pages no encontraba el
+  # artefacto recién subido en el mismo job («Found 0 artifact(s)»). Si aun así falla, se reintenta una vez.
+  build:
     needs: check
     if: needs.check.outputs.enabled == 'true'
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ github.event.repository.default_branch }}  # con el último seguimiento guardado
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - run: pip install -r requirements.txt
       - run: python -m scanner_pump.web site --bstocks --seguimiento datos/seguimiento --listados datos/listados.json --prediccion datos/prediccion
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.reintento.outputs.page_url || steps.deployment.outputs.page_url }}
+    steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        continue-on-error: true
+        uses: actions/deploy-pages@v5
+      - if: steps.deployment.outcome == 'failure'
+        run: sleep 30
+      - id: reintento
+        if: steps.deployment.outcome == 'failure'
+        uses: actions/deploy-pages@v5
